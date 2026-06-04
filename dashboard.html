@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+
+<html lang="fr">
+
+<head>
+
+  <meta charset="UTF-8" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>OG Time Tab - Dashboard</title>
+
+  <link rel="stylesheet" href="dashboard.css" />
+
+</head>
+
+<body>
+
+  <header class="topbar">
+
+    <div>
+
+      <h1>OG Time Tab</h1>
+
+      <p class="week-label" id="week-label"></p>
+
+    </div>
+
+    <div class="topbar-actions">
+
+      <button type="button" id="erase-data-btn" class="btn-erase">Effacer les données</button>
+
+      <nav class="week-nav" id="week-nav">
+
+        <button type="button" id="prev-week" aria-label="Semaine precedente">&lsaquo;</button>
+
+        <button type="button" id="today-btn">Aujourd'hui</button>
+
+        <button type="button" id="next-week" aria-label="Semaine suivante">&rsaquo;</button>
+
+      </nav>
+
+    </div>
+
+  </header>
+
+
+
+  <nav class="main-tabs" role="tablist">
+
+    <button type="button" class="main-tab active" data-tab="calendar" role="tab" aria-selected="true">Calendrier</button>
+
+    <button type="button" class="main-tab" data-tab="stats" role="tab" aria-selected="false">Statistiques</button>
+
+  </nav>
+
+
+
+  <section id="panel-calendar" class="panel active" role="tabpanel">
+
+    <div class="calendar-wrap">
+
+      <div class="calendar-toolbar">
+        <div class="stats-metric-toggle calendar-metric-toggle" role="group" aria-label="Métrique affichée sur le calendrier">
+          <button type="button" class="stats-metric-btn calendar-metric-btn active" data-calendar-metric="open" aria-pressed="true" title="Temps et onglets ouverts (tous les onglets suivis)">Ouvert</button>
+          <button type="button" class="stats-metric-btn calendar-metric-btn" data-calendar-metric="active" aria-pressed="false" title="Uniquement l'activité humaine (sessions avec temps actif)">Actif</button>
+        </div>
+        <div class="calendar-zoom">
+          <label class="calendar-zoom-label" for="calendar-zoom-y">
+            Zoom vertical <span id="calendar-zoom-y-value" class="calendar-zoom-value">200%</span>
+          </label>
+          <input
+            type="range"
+            id="calendar-zoom-y"
+            min="0.5"
+            max="4"
+            step="0.05"
+            value="2"
+            aria-valuemin="50"
+            aria-valuemax="400"
+            aria-valuenow="200"
+            aria-valuetext="200 pour cent"
+            aria-label="Zoom vertical du calendrier"
+          />
+        </div>
+      </div>
+
+      <div class="grid-scroll" id="grid-scroll">
+
+        <div class="calendar-head">
+
+          <div class="time-gutter" aria-hidden="true"></div>
+
+          <div class="day-headers" id="day-headers"></div>
+
+        </div>
+
+        <div class="calendar-body">
+
+          <div class="time-axis" id="time-axis"></div>
+
+          <div class="day-grid">
+
+            <div class="cols-grid" id="grid-cols"></div>
+
+            <div class="blocks-layer" id="blocks-layer"></div>
+
+            <div class="now-line" id="now-line" hidden></div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </section>
+
+
+
+  <section id="panel-stats" class="panel" role="tabpanel" hidden>
+
+    <div id="stats-empty" class="stats-empty hidden" role="status">
+
+      <p id="stats-empty-message"></p>
+
+      <button type="button" id="stats-goto-today" class="stats-empty-today hidden">Aujourd'hui</button>
+
+    </div>
+
+    <div class="stats-layout">
+
+      <div class="stats-grid stats-grid--top stats-grid--masonry">
+
+        <article class="chart-card chart-card--daily">
+
+          <h2 id="chart-daily-title">Temps réel par jour (14 jours)</h2>
+
+          <div class="chart-grow-wrap">
+            <canvas id="chart-daily" aria-label="Temps réel ouvert et actif par jour sur 14 jours"></canvas>
+          </div>
+
+        </article>
+
+        <article class="chart-card chart-card--groups chart-card--day">
+
+          <div class="chart-card-header">
+
+            <div class="chart-card-header-main">
+
+              <h2 id="chart-day-title">Répartition par jour (actif)</h2>
+
+              <div class="stats-day-nav" role="group" aria-label="Jour sélectionné pour la répartition">
+
+                <button type="button" id="stats-day-prev" class="stats-day-nav-btn" aria-label="Jour precedent">&lsaquo;</button>
+
+                <input type="date" id="stats-day-picker" class="stats-day-picker" aria-label="Date du jour" />
+
+                <button type="button" id="stats-day-next" class="stats-day-nav-btn" aria-label="Jour suivant">&rsaquo;</button>
+
+              </div>
+
+            </div>
+
+            <div class="stats-metric-toggle" role="group" aria-label="Métrique du graphique répartition par jour">
+
+              <button type="button" class="stats-metric-btn active" data-metric="active" aria-pressed="true">Actif</button>
+
+              <button type="button" class="stats-metric-btn" data-metric="open" aria-pressed="false">Ouvert</button>
+
+            </div>
+
+          </div>
+
+          <div class="doughnut-wrap">
+
+            <div id="chart-doughnut-day" class="doughnut-chart-area">
+
+              <canvas id="chart-groups-day" aria-label="Répartition par groupe pour un jour"></canvas>
+
+            </div>
+
+            <ul id="doughnut-legend-day" class="doughnut-legend" hidden aria-label="Sites par durée pour le jour sélectionné"></ul>
+
+          </div>
+
+        </article>
+
+        <article class="chart-card chart-card--insights">
+
+          <div class="chart-card-header">
+            <div class="chart-card-header-main">
+              <h2 id="insights-title">Insights semaine</h2>
+            </div>
+            <div class="stats-metric-toggle" role="group" aria-label="Période des insights">
+              <button type="button" class="stats-metric-btn active" data-insights-scope="week" aria-pressed="true">Semaine</button>
+              <button type="button" class="stats-metric-btn" data-insights-scope="day" aria-pressed="false">Jour</button>
+            </div>
+          </div>
+
+          <div id="week-insights" class="week-insights" role="list" aria-label="Insights pour la semaine affichée"></div>
+          <div id="day-insights" class="week-insights" role="list" aria-label="Insights pour le jour sélectionné" hidden></div>
+
+        </article>
+
+        <article class="chart-card chart-card--timeline" id="card-activity-timeline">
+          <div class="chart-card-header">
+            <div class="chart-card-header-main">
+              <h2 id="chart-activity-timeline-title">Chronologie activité (semaine affichée)</h2>
+            </div>
+          </div>
+          <div class="chart-grow-wrap timeline-chart-wrap">
+            <canvas
+              id="chart-activity-timeline"
+              aria-label="Chronologie temporelle de l'activité ouverte et active"
+            ></canvas>
+          </div>
+        </article>
+
+      </div>
+
+      <article class="chart-card chart-card--groups chart-card--week-full">
+
+        <h2 id="chart-groups-title">Répartition par site / groupe (semaine)</h2>
+
+        <div class="distribution-week-layout">
+
+          <div class="distribution-week-charts" aria-label="Camemberts actif et ouvert pour la semaine affichée">
+
+            <div class="doughnut-dual">
+
+              <div class="doughnut-dual-item">
+
+                <span class="doughnut-dual-label">Actif</span>
+
+                <div id="chart-doughnut-active" class="doughnut-chart-area doughnut-chart-area--dual">
+
+                  <canvas id="chart-groups-active" aria-label="Répartition par groupe - temps actif"></canvas>
+
+                </div>
+
+              </div>
+
+              <div class="doughnut-dual-item">
+
+                <span class="doughnut-dual-label">Ouvert</span>
+
+                <div id="chart-doughnut-open" class="doughnut-chart-area doughnut-chart-area--dual">
+
+                  <canvas id="chart-groups-open" aria-label="Répartition par groupe - temps ouvert"></canvas>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          <ul id="doughnut-legend" class="doughnut-legend doughnut-legend--dual" hidden aria-label="Sites - actif et ouvert pour la semaine"></ul>
+
+        </div>
+
+      </article>
+
+    </div>
+
+  </section>
+
+
+
+  <aside class="legend">
+
+    <span><i class="swatch green"></i> Temps actif</span>
+
+    <span><i class="swatch red"></i> Inactif dominant (&lt; 25 % actif)</span>
+
+    <span><i class="swatch consolidated"></i> Plusieurs onglets (liste)</span>
+
+    <span class="live-dot" id="live-indicator">&#9679; Temps réel</span>
+
+  </aside>
+
+
+
+  <div id="block-picker" class="block-picker hidden" role="dialog" aria-label="Onglets du créneau" aria-modal="true">
+
+    <p class="block-picker-heading" id="block-picker-heading"></p>
+
+    <ul id="block-picker-list" class="block-picker-list"></ul>
+
+  </div>
+
+
+
+  <div id="erase-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="erase-modal-title">
+
+    <div class="modal-backdrop" data-close-erase-modal></div>
+
+    <div class="modal-content erase-modal-content">
+
+      <header class="modal-header">
+
+        <h2 id="erase-modal-title">Effacer les données</h2>
+
+        <button type="button" class="modal-close" data-close-erase-modal aria-label="Fermer">&times;</button>
+
+      </header>
+
+      <p class="erase-warning">
+
+        Action <strong>irréversible</strong>. Les sessions et le temps enregistrés dans la période choisie (depuis maintenant vers le passé) seront supprimées. Les données plus anciennes sont conservées (troncature si une session chevauche la limite).
+
+      </p>
+
+      <div class="erase-form">
+
+        <label class="erase-form-label" for="erase-amount">Effacer les</label>
+
+        <input type="number" id="erase-amount" class="erase-input" min="1" value="15" required />
+
+        <select id="erase-unit" class="erase-select" aria-label="Unité de durée">
+
+          <option value="minutes">Minutes</option>
+
+          <option value="hours">Heures</option>
+
+          <option value="days">Jours</option>
+
+        </select>
+
+      </div>
+
+      <p id="erase-confirm-text" class="erase-confirm-text" role="status"></p>
+
+      <div class="erase-actions">
+
+        <button type="button" class="erase-cancel" data-close-erase-modal>Annuler</button>
+
+        <button type="button" id="erase-confirm-btn" class="btn-danger">Effacer</button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+
+  <div id="block-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+
+    <div class="modal-backdrop" data-close-modal></div>
+
+    <div class="modal-content">
+
+      <header class="modal-header">
+
+        <h2 id="modal-title"></h2>
+
+        <button type="button" class="modal-close" data-close-modal aria-label="Fermer">&times;</button>
+
+      </header>
+
+      <dl class="modal-stats" id="modal-stats"></dl>
+
+      <section class="modal-sessions">
+
+        <h3>Schéma de la journée (même groupe)</h3>
+
+        <div id="modal-day-chart-wrap" class="modal-day-chart-wrap">
+          <canvas id="modal-day-chart" aria-label="Schéma temporel des sessions du jour"></canvas>
+          <p id="modal-day-chart-empty" class="modal-day-chart-empty hidden">
+            Aucune session à afficher pour ce groupe ce jour.
+          </p>
+        </div>
+
+        <ul id="modal-sessions-list"></ul>
+
+      </section>
+
+    </div>
+
+  </div>
+
+
+
+  <script src="lib/chart.umd.min.js"></script>
+
+  <script type="module" src="dashboard.js"></script>
+
+</body>
+
+</html>
+

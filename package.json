@@ -1,0 +1,19 @@
+{
+  "name": "og-time-tab",
+  "version": "1.0.57",
+  "description": "Extension Chrome de suivi du temps par onglet (temps ouvert + temps actif).",
+  "main": "background.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "chart.js": "^4.4.4"
+  }
+}

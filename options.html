@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OG Time Tab — Options</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <main>
+    <h1>Paramètres — comportement humain</h1>
+    <p class="intro">Ces réglages contrôlent quand le <strong>temps actif</strong> s’incrémente sur un onglet.</p>
+
+    <form id="options-form">
+      <fieldset>
+        <legend>Souris</legend>
+        <label>
+          Distance minimale (px) dans la fenêtre
+          <input type="number" name="mouseDistanceThreshold" min="10" max="2000" step="10" />
+        </label>
+        <label>
+          Fenêtre souris (ms)
+          <input type="number" name="mouseWindowMs" min="500" max="30000" step="500" />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Clavier &amp; scroll</legend>
+        <label class="checkbox">
+          <input type="checkbox" name="trackKeyboard" />
+          Compter les frappes clavier
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" name="trackScroll" />
+          Compter le scroll / molette
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Inactivité &amp; heartbeat</legend>
+        <label>
+          Pause après inactivité (ms) — lecture sans couper tout de suite
+          <input type="number" name="inactivityMs" min="5000" max="600000" step="1000" />
+        </label>
+        <label>
+          Intervalle tick compteur (ms)
+          <input type="number" name="heartbeatIntervalMs" min="500" max="10000" step="500" />
+        </label>
+        <label>
+          Vérification activité récente (ms)
+          <input type="number" name="activityCheckIntervalMs" min="5000" max="300000" step="1000" />
+        </label>
+        <label>
+          Score minimum d’activité par période
+          <input type="number" name="minActivityScore" min="1" max="20" step="1" />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Regroupement URL</legend>
+        <label>
+          Mode
+          <select name="groupMode">
+            <option value="origin">Origin (schéma + hôte + port)</option>
+            <option value="domain">Domaine seul</option>
+            <option value="prefix">Chemin (profondeur)</option>
+          </select>
+        </label>
+        <label>
+          Profondeur chemin (mode prefix)
+          <input type="number" name="groupPathDepth" min="1" max="10" step="1" />
+        </label>
+        <label>
+          Préfixe URL personnalisé (optionnel)
+          <input type="text" name="groupPrefix" placeholder="https://example.com/app" />
+        </label>
+      </fieldset>
+
+      <div class="actions">
+        <button type="submit" class="btn primary">Enregistrer</button>
+        <span id="status" role="status"></span>
+      </div>
+    </form>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

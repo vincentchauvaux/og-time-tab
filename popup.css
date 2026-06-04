@@ -1,0 +1,79 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 320px;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #1a1d23;
+  color: #e8eaed;
+  padding: 12px;
+}
+header h1 { font-size: 1rem; font-weight: 600; }
+.subtitle { font-size: 0.75rem; color: #9aa0a6; margin-top: 2px; }
+section { margin-top: 12px; }
+section h2 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #9aa0a6; margin-bottom: 6px; }
+.tabs-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+.tabs-count {
+  font-size: 0.62rem;
+  font-weight: 400;
+  color: #6b7280;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.tabs-count.is-empty { display: none; }
+.card {
+  background: #2c313c;
+  border-radius: 8px;
+  padding: 10px;
+}
+.card.hidden { display: none; }
+.title { font-size: 0.85rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.url { font-size: 0.7rem; color: #9aa0a6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.metrics { display: flex; gap: 16px; margin-top: 8px; font-size: 0.8rem; }
+.metrics .label { display: block; font-size: 0.65rem; color: #9aa0a6; }
+.metrics .active { color: #28a745; font-weight: 600; }
+#tabs-ul { list-style: none; max-height: 180px; overflow-y: auto; }
+#tabs-ul li {
+  background: #2c313c;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+}
+#tabs-ul li .row { display: flex; justify-content: space-between; }
+#tabs-ul li .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+#tabs-ul li .sub { color: #9aa0a6; font-size: 0.68rem; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tabs-ul li .times { color: #9aa0a6; font-size: 0.7rem; margin-top: 4px; }
+#tabs-ul li.active-tab { outline: 1px solid #28a745; }
+.chart-wrap {
+  position: relative;
+  height: 120px;
+  margin-top: 4px;
+}
+#today-sessions-chart {
+  width: 100%;
+  height: 100%;
+}
+.chart-empty {
+  font-size: 0.72rem;
+  color: #9aa0a6;
+  margin-bottom: 4px;
+}
+.chart-empty.hidden {
+  display: none;
+}
+footer { display: flex; gap: 8px; margin-top: 14px; }
+.btn {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 0.8rem;
+  background: #2c313c;
+  color: #e8eaed;
+}
+.btn.primary { background: #28a745; color: #fff; font-weight: 600; }

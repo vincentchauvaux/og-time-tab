@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OG Time Tab</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <h1>OG Time Tab</h1>
+    <p class="subtitle">Suivi temps réel</p>
+  </header>
+  <section id="focused" class="card hidden">
+    <h2>Onglet actif</h2>
+    <p class="title" id="focused-title"></p>
+    <p class="url" id="focused-url"></p>
+    <div class="metrics">
+      <div><span class="label">Ouvert</span><span id="focused-open">0s</span></div>
+      <div><span class="label">Actif</span><span id="focused-active" class="active">0s</span></div>
+    </div>
+  </section>
+  <section id="tabs-list">
+    <h2 class="tabs-heading">
+      Onglets suivis
+      <span id="tabs-count" class="tabs-count"></span>
+    </h2>
+    <ul id="tabs-ul"></ul>
+  </section>
+  <section id="today-sessions" class="card">
+    <h2>Sessions du jour</h2>
+    <div id="today-sessions-empty" class="chart-empty hidden">Aucune session aujourd'hui.</div>
+    <div class="chart-wrap">
+      <canvas id="today-sessions-chart" aria-label="Schéma temporel des sessions du jour"></canvas>
+    </div>
+  </section>
+  <footer>
+    <a href="dashboard.html" target="_blank" class="btn primary">Dashboard</a>
+    <a href="options.html" target="_blank" class="btn">Options</a>
+  </footer>
+  <script src="lib/chart.umd.min.js"></script>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

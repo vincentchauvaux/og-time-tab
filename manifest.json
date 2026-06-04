@@ -1,0 +1,53 @@
+{
+    "manifest_version":  3,
+    "name":  "OG Time Tab",
+    "version":  "1.0.78",
+    "description":  "Suivi du temps par onglet - temps ouvert et temps actif (comportement humain).",
+    "permissions":  [
+                        "tabs",
+                        "storage",
+                        "alarms",
+                        "scripting"
+                    ],
+    "host_permissions":  [
+                             "\u003call_urls\u003e"
+                         ],
+    "background":  {
+                       "service_worker":  "background.js",
+                       "type":  "module"
+                   },
+    "action":  {
+                   "default_popup":  "popup.html",
+                   "default_title":  "OG Time Tab"
+               },
+    "options_ui":  {
+                       "page":  "options.html",
+                       "open_in_tab":  true
+                   },
+    "content_scripts":  [
+                            {
+                                "matches":  [
+                                                "\u003call_urls\u003e"
+                                            ],
+                                "js":  [
+                                           "content.js"
+                                       ],
+                                "run_at":  "document_idle",
+                                "all_frames":  false
+                            }
+                        ],
+    "web_accessible_resources":  [
+                                     {
+                                         "resources":  [
+                                                           "dashboard.html",
+                                                           "dashboard.css",
+                                                           "dashboard.js",
+                                                           "lib/*.js",
+                                                           "lib/chart.umd.min.js"
+                                                       ],
+                                         "matches":  [
+                                                         "\u003call_urls\u003e"
+                                                     ]
+                                     }
+                                 ]
+}
