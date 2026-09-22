@@ -18,11 +18,17 @@
 
   <header class="topbar">
 
-    <div>
+    <div class="app-brand">
 
-      <h1>OG Time Tab</h1>
+      <img class="app-logo" src="icons/icon48.png" width="32" height="32" alt="" />
 
-      <p class="week-label" id="week-label"></p>
+      <div>
+
+        <h1>OG Time Tab</h1>
+
+        <p class="week-label" id="week-label"></p>
+
+      </div>
 
     </div>
 
@@ -67,7 +73,7 @@
         </div>
         <div class="calendar-zoom">
           <label class="calendar-zoom-label" for="calendar-zoom-y">
-            Zoom vertical <span id="calendar-zoom-y-value" class="calendar-zoom-value">200%</span>
+            Zoom vertical <span id="calendar-zoom-y-value" class="calendar-zoom-value">400%</span>
           </label>
           <input
             type="range"
@@ -75,11 +81,11 @@
             min="0.5"
             max="4"
             step="0.05"
-            value="2"
+            value="4"
             aria-valuemin="50"
             aria-valuemax="400"
-            aria-valuenow="200"
-            aria-valuetext="200 pour cent"
+            aria-valuenow="400"
+            aria-valuetext="400 pour cent"
             aria-label="Zoom vertical du calendrier"
           />
         </div>
@@ -163,11 +169,17 @@
 
             </div>
 
-            <div class="stats-metric-toggle" role="group" aria-label="Métrique du graphique répartition par jour">
+            <div class="chart-card-header-actions">
 
-              <button type="button" class="stats-metric-btn active" data-metric="active" aria-pressed="true">Actif</button>
+              <button type="button" id="stats-day-export-csv" class="btn-summary" title="Télécharger toutes les données du jour en CSV">Résumé</button>
 
-              <button type="button" class="stats-metric-btn" data-metric="open" aria-pressed="false">Ouvert</button>
+              <div class="stats-metric-toggle" role="group" aria-label="Métrique du graphique répartition par jour">
+
+                <button type="button" class="stats-metric-btn active" data-metric="active" aria-pressed="true">Actif</button>
+
+                <button type="button" class="stats-metric-btn" data-metric="open" aria-pressed="false">Ouvert</button>
+
+              </div>
 
             </div>
 

@@ -22,6 +22,7 @@ Suivi du temps par onglet : **temps ouvert** (onglet existant) et **temps actif*
 | `lib/format-duration.js` | Durées lisibles (compact + détaill pour tooltips) |
 | `lib/chart-colors.js` | Couleur stable par `groupKey` + dédup stricte par vue (`assignColorsForItems`, palette 24 + repli HSL, v1.0.43) |
 | `lib/chart.umd.min.js` | Chart.js (bundle local, CSP extension) |
+| `icons/` | Logo horloge PNG (16 / 32 / 48 / 128) — barre d’outils Chrome + UI |
 | `popup.html/js/css` | Résumé onglets + liens ; compteur groupes/onglets + schéma "sessions du jour" Chart.js (v1.0.60) |
 | `options.html/js/css` | Réglages comportement humain |
 | `dashboard.html/js/css` | Calendrier semaine, modal détail, graphiques |
@@ -42,15 +43,16 @@ Seuils : secondes (&lt; 1 min), minutes (&lt; 1 h), heures (&lt; 24 h), jours (&
 ### Onglet Calendrier
 
 - Grille semaine (lun - dim), créneaux 30 min, hauteur de base **32 px** par slot (× zoom vertical), plage **00:00 - 24:00** (locale), scroll vertical unique (axe + colonnes).
-- **Zoom vertical** (v1.0.32, plage étendue v1.0.33, scroll now v1.0.36, défaut présent v1.0.46) : slider dans `.calendar-toolbar` (à côté **Ouvert** / **Actif**) ; label « Zoom vertical » + valeur (ex. `200 %` sur semaine courante) ; plage **50 %–400 %** (`0,5×`–`4×`, pas `0,05`) ; persistance `sessionStorage` `ogTimeTabCalendarZoomY` (écrite au premier réglage du slider). **Sans clé session** : défaut **200 %** si `weekStart` = semaine courante, **100 %** sinon ; `syncCalendarZoomForDisplayedWeek` à chaque changement de semaine ; préférence enregistrée inchangée sur toutes les semaines. Recalcul `slotHPx`, axe, colonnes et blocs (`applyCalendarZoomY`). Ajustement slider ou retour semaine courante sans préférence : `scrollToNow` → `scrollCalendarToNow` (ligne now ~28 % viewport) ; semaine sans jour courant → ratio de scroll préservé.
+- **Zoom vertical** (v1.0.32, plage étendue v1.0.33, scroll now v1.0.36, défaut présent v1.0.87) : slider dans `.calendar-toolbar` (à côté **Ouvert** / **Actif**) ; label « Zoom vertical » + valeur (ex. `400 %` sur semaine courante) ; plage **50 %–400 %** (`0,5×`–`4×`, pas `0,05`) ; persistance `sessionStorage` `ogTimeTabCalendarZoomY` (écrite au premier réglage du slider). **Sans clé session** : défaut **400 %** si `weekStart` = semaine courante, **100 %** sinon ; `syncCalendarZoomForDisplayedWeek` à chaque changement de semaine ; préférence enregistrée inchangée sur toutes les semaines. Recalcul `slotHPx`, axe, colonnes et blocs (`applyCalendarZoomY`). Ajustement slider ou retour semaine courante sans préférence : `scrollToNow` → `scrollCalendarToNow` (ligne now ~28 % viewport) ; semaine sans jour courant → ratio de scroll préservé.
 - Scroll auto vers l'heure courante à l'affichage de la semaine en cours (une fois par semaine affichée, `autoScrollToNowIfNeeded` — pas à chaque tick 2 s).
 - **Métrique calendrier** (v1.0.50, plage active v1.0.51, remplace Précis/Empilé v1.0.47) : toggle **Ouvert** | **Actif** dans `.calendar-toolbar` ; persistance `sessionStorage` `ogTimeTabCalendarMetric` (`open` | `active`, défaut `open` ; migration `ogTimeTabCalendarViewMode` : `stack` → `open`, `unstack` → `active`).
-  - **Ouvert (`open`)** : clustering temporel (chevauchement, écart ≤ 5 min, plage min 15 min ; fusion forcée si > 10 clusters / créneau 15 min), puis **1 carte par site** (`groupKey`) par créneau 15 min — titre `formatGroupLabel(groupKey)` ou `hostname · N onglets` ; plage union **ouverture**, **A · O** sommés ; tous les onglets ouverts comptent (y compris sans activité) ; hauteur min **15 min** ; plusieurs sites même créneau → **côte à côte** (max **4** + carte **« +N »**, v1.0.49) ; **clic** carte → modal `#block-modal` (`openStackSiteCardModal`) ; **clic « +N »** → `openStackSlotSitesModal`.
-  - **Actif (`active`)** (v1.0.60) : **uniquement** sessions avec `activeSeconds ≥ 30 s` (seuil `ACTIVE_MIN_DISPLAY_SECONDS`) ; plage visuelle = **durée active** (pas la plage d'ouverture) — ancrage sur `lastActivityAt` (live) ou fin de session (historique) ; union des segments actifs par site / créneau de layout **5 min** (`ACTIVE_STACK_BIN_MINUTES`) ; même layout horizontal (max 4 + « +N ») ; hauteur proportionnelle au temps actif (plancher **5 min** / **28 px** en rangée) ; libellé horaire = plage active affichée ; badges **A · O** ; clic → mêmes modales.
-- **Hauteur / fin visuelle** (v1.0.75) : plancher **15 min** (Ouvert, `MIN_BLOCK_MINUTES`) / **5 min** (Actif, `ACTIVE_MIN_VISUAL_MINUTES`, **28 px** en rangée) pour la lisibilité ; **bas de carte = heure de fin réelle** (extension du plancher vers le haut uniquement) ; zone hachurée en tête si plancher actif + libellé fin `HH:MM` en bas.
+  - **Ouvert (`open`)** (présentation fusionnée v1.0.84) : clustering temporel (chevauchement, écart ≤ 5 min, plage min 15 min ; fusion forcée si > 10 clusters / créneau 15 min), puis **1 carte par site** (`groupKey`) ; plages qui se **chevauchent** → **bloc fusionné** multi-lignes (site ; au survol `A · O` + plage) ; sinon carte isolée (au repos nom seul, survol plage + A·O) ; titre `formatGroupLabel` (sans `www.`) ; **clic** → modal.
+  - **Actif (`active`)** (présentation côte à côte v1.0.84, spark v1.0.90, compact v1.0.91) : **uniquement** sessions avec `activeSeconds ≥ 30 s` ; plage visuelle = **durée active** (min→max des rafales, peut inclure des trous) ; regroupement **15 min** + fusion rafales même site (≤ 20 min, segments conservés) ; plusieurs sites → **lanes horizontales** (max **2** + « +N ») ; carte au repos = **titre seul** (plancher ~22 px) ; survol = durée + plage (agrandissement) ; **mini-graphique O/A vertical** (10 % largeur, discret) ; clic → modal site.
+- **Hauteur / fin visuelle** (v1.0.75, fusion Ouvert v1.0.84, Actif compact v1.0.91) : plancher **15 min** (Ouvert isolé) / **~22 px titre** (Actif isolé) ; bloc fusionné Ouvert = hauteur min selon nombre de lignes (**22 px**/ligne) ; **bas de carte = heure de fin réelle** ; zone hachurée en tête si plancher actif + libellé fin `HH:MM` en bas (masqué en Actif).
 - **Un onglet** : fond sombre neutre semi-transparent ; **bordure 2px** rouge → vert selon `ratio = clamp(activeSeconds / max(openSeconds, 1), 0..1)` (CSS `--activity-ratio`, `color-mix`) ; plage horaire affichée = plage **Ouvert** (ouverture) ou plage **active** (Actif), même si la hauteur visuelle est tendue au plancher 3 min.
 - **Plusieurs onglets** (mode empilé) : **une carte par site** au même créneau (pas N cartes pour N onglets du même `groupKey`) ; plusieurs sites distincts → rangée horizontale (max 4 + « +N », v1.0.49) ; **clic** carte = modal détail site (`openStackSiteCardModal`, v1.0.45).
-- Survol : infobulle (`title`) avec durées détaillées (`format-duration.js`).
+- Survol : carte **agrandie** (révélation plage / durées, v1.0.83) + infobulle (`title`) avec durées détaillées (`format-duration.js`).
+- **O/A sur cartes** (v1.0.88) : temps ouvert = **union** des plages `start`–`end` des onglets du site (pas somme) ; actif plafonné par O.
 - **Clic** sur bloc simple → **modal** (titre, URL, groupe, plage, O/A, schéma temporel de la journée pour le même `groupKey`) ; **URL** et **Groupe** cliquables → nouvel onglet (v1.0.24).
 - Rafraîchissement calendrier : snapshot structure + métriques (pas de recréation DOM si inchangé, cf. v1.0.5 stats).
 - Ligne  now  sur la colonne du jour courant.
@@ -101,7 +103,7 @@ Seuils : secondes (&lt; 1 min), minutes (&lt; 1 h), heures (&lt; 24 h), jours (&
 **Grille stats (v1.0.64, bento/masonry)** : mobile **1 colonne**, tablette **2 colonnes**, desktop large **masonry 12 colonnes** avec cartes de tailles variées pour mieux hiérarchiser les contenus.
 
 - **Temps réel par jour** (barres, 14 derniers jours, colonne 1) : **deux séries** fixes Ouvert + Actif ; agrégation par **union temporelle journalière** (non-cumulative entre onglets parallèles). **Clic sur une barre** sélectionne ce jour pour la carte "Répartition par jour" (indication dans le sous-titre du titre).
-- **Répartition par jour** (doughnut, colonne 2) : toggle **Actif** | **Ouvert** (`sessionStorage` `ogTimeTabStatsMetric`, défaut : actif). `aggregateDayByGroup` sur **un seul** jour (`statsSelectedDay`). Camembert `#chart-groups-day`, liste `#doughnut-legend-day`. Navigation jour : **‹** / **›** + date picker ; persistance `ogTimeTabStatsDay`. **Clic ligne site** → modal `openGroupModalForDay` (v1.0.25) ; icne **** ouvre le site.
+- **Répartition par jour** (doughnut, colonne 2) : toggle **Actif** | **Ouvert** (`sessionStorage` `ogTimeTabStatsMetric`, défaut : actif). Bouton **Résumé** → CSV du jour (`og-time-tab-resume-YYYY-MM-DD.csv`, v1.0.92). `aggregateDayByGroup` sur **un seul** jour (`statsSelectedDay`). Camembert `#chart-groups-day`, liste `#doughnut-legend-day`. Navigation jour : **‹** / **›** + date picker ; persistance `ogTimeTabStatsDay`. **Clic ligne site** → modal `openGroupModalForDay` (v1.0.25) ; icne **** ouvre le site.
 - **Insights semaine** (colonne 3, v1.0.19) : analyse de la **semaine affichée** - tuiles O/A, top sites, focus %, etc. ; clic → modal sessions (URL / groupe cliquables depuis v1.0.24).
 - **Insights** (colonne 3, v1.0.29, correctif affichage v1.0.39) : toggle **Semaine | Jour** (`#week-insights` / `#day-insights`, un seul visible). Mode **Semaine** : agrégation 7 jours `weekStart` (`aggregateWeekInsights`) — plage lun–dim, tuile « Jour le plus actif ». Mode **Jour** : uniquement `statsSelectedDay` (`aggregateDayInsights`, `dayKeys: [statsSelectedDay]`) — date unique (ex. « mar. 26 mai 2026 »), total O/A du jour, site top actif/ouvert, focus %, ratio, top 3 actifs, onglet le plus actif, plage horaire ; clic tuile/top → `openGroupModalForDay`. Synchronisé avec clic barre 14 j et sélecteur « Répartition par jour ».
 - **Chronologie activité** (v1.0.74, bento) : courbe Chart.js **Ouvert/Actif** en profils **bucket 1 h** (sans sélecteur) ; portée alignée sur le toggle insights.  
@@ -122,7 +124,7 @@ Seuils : secondes (&lt; 1 min), minutes (&lt; 1 h), heures (&lt; 24 h), jours (&
 - **14 jours (barres "Temps réel par jour")** : calcul par **union temporelle** par jour (intervalle ouvert tronqué au jour, actif prudent ancré en fin de session/`lastActivityAt`, garde `A <= O`).
 - **Source unifiée 14j + Insights + Chronologie** (v1.0.68+) : ces trois vues utilisent la même couche d'agrégation journalière (intervalles union), plus de pipeline parallèle divergent.
 - **Sémantique Chronologie (v1.0.73)** : en scopes **Jour** et **Semaine**, affichage en **valeurs bucket** (delta par période), plus de cumul ni de série "totaux jour" ; garde `A <= O` conservée.
-- **Somme multi-onglets (doughnuts/légendes)** : les répartitions par site/groupe restent **cumulatives par groupe** (intention analytics de contribution), sans union temporelle globale inter-sites.
+- **Somme multi-onglets (doughnuts/légendes)** (corrigé v1.0.85) : union temporelle **par groupe** (même logique que barres 14 j / Insights) — fini le double comptage des onglets parallèles du même site.
 - **Exception Insights (v1.0.62)** : le KPI **Temps réel total** (Jour/Semaine) utilise une **union temporelle** des intervalles pour éviter la double comptabilisation des onglets parallèles.  
   - `O` = union des plages ouvertes tronquées à la fenêtre d'insight.  
   - `A` = approximation prudente via union des plages actives ancrées en fin de session (ou `lastActivityAt` pour le live), puis plafonnée par `O`.
@@ -188,8 +190,8 @@ Le changement de focus enregistre une activité lgre **uniquement** sur l'onglet
 
 ### Calendrier - zoom vertical (v1.0.32, scroll now v1.0.36)
 
-10. Onglet **Calendrier** : barre au-dessus de la grille — **Ouvert** / **Actif** puis **Zoom vertical** + curseur + pourcentage (défaut `200 %` semaine courante sans préférence).
-11. Glisser vers la droite (200 %) : créneaux et blocs plus hauts ; axe `00:00`–`24:00` étiré ; mode **Ouvert** : hauteur min **15 min** ; mode **Actif** : hauteur ~durée active (plancher 3 min) ; la vue **reste centrée sur la ligne now** (pas bloquée en haut de grille).
+10. Onglet **Calendrier** : barre au-dessus de la grille — **Ouvert** / **Actif** puis **Zoom vertical** + curseur + pourcentage (défaut `400 %` semaine courante sans préférence).
+11. Glisser le zoom : créneaux et blocs plus hauts/bas ; axe `00:00`–`24:00` étiré ; mode **Ouvert** : hauteur min **15 min** ; mode **Actif** : hauteur ~durée active (plancher 3 min) ; la vue **reste centrée sur la ligne now** (pas bloquée en haut de grille).
 12. Glisser vers la gauche (50 %) : grille compacte ; blocs et heures alignés ; scroll toujours recalé sur l'heure actuelle.
 13. Recharger le dashboard : dernier zoom conservé (`ogTimeTabCalendarZoomY`) ; premier affichage semaine courante → scroll initial vers now (une fois).
 14. Naviguer vers une **autre semaine** (‹ ›) puis zoomer : pas de saut vers now (ratio préservé) ; revenir **Aujourd'hui** puis zoomer → recalage sur now.
@@ -253,7 +255,7 @@ Le changement de focus enregistre une activité lgre **uniquement** sur l'onglet
 
 18. Ouvrir **3+ onglets** au même moment, interagir différemment sur chacun.
 19. Mode **Ouvert** : 10 onglets Gmail au même créneau → **1 carte** `mail.google.com · 10 onglets` (pas 10 cartes avec titres d'onglet).
-20. 3 sites différents au même créneau → **3 cartes** côte à côte (bordures selon ratio activité rouge → vert) ; **clic** carte → modal site ; **5+ sites** → 4 cartes + **« +N »** → modal liste (identique en **Actif** si les 3+ sites ont du temps actif).
+20. 3 sites différents au **même moment** (chevauchement) → **Actif** : **un bloc fusionné** avec 3 lignes chronologiques ; **Ouvert** : 3 cartes côte à côte ; clic ligne/carte → modal site.
 21. Mode **Actif** : onglet ouvert 10 min sans interaction → **aucune** carte ; session 1 min active sur 2 h ouverte → **petite carte** sur ~1 min (pas barre sur 2 h) ; 4 onglets actifs même créneau → cartes site côte à côte ; **A · O** sur chaque carte ; masqué si actif < 30 s.
 22. Recharger le dashboard : dernière métrique conservée (`ogTimeTabCalendarMetric`).
 
@@ -367,11 +369,11 @@ Le changement de focus enregistre une activité lgre **uniquement** sur l'onglet
 
 **Implémentation** (`dashboard.js`) : `normalizeBlockOpenRange` / `normalizeBlockActiveRange` ; `buildMetricDisplayItems` ; `clusterVisualRange` sans extension 15 min en Actif ; `lastActivityAt` dans `collectBlocks` (live). **Nettoyage** : suppression `visualRangeForRealRange` ; code mort v1.0.47 déjà retiré (`buildUnstackDisplayItems`, `renderUnstackBlocks`, `pickMostActiveBlock`) ; `assignStackSiteLayout` réservé aux builders Ouvert/Actif ; migration `ogTimeTabCalendarViewMode` conservée dans `loadCalendarMetric`.
 
-## UX - calendrier empilé : même créneau côte à côte (v1.0.49)
+## UX - calendrier empilé : même créneau (v1.0.49, inversion présentation v1.0.84)
 
-**Demande** : plusieurs cartes au même moment (même créneau 15 min) en **horizontal**, pas empilées verticalement ; max **4** visibles + **« +N »** si plus de sites.
+**Demande** : plusieurs cartes au même moment. **v1.0.84** : présentations **inversées** — **Actif** = lanes **horizontales** (ex-Ouvert, max 2 + « +N ») ; **Ouvert** = **bloc fusionné** multi-lignes si chevauchement (ex-Actif). Compact au repos / détail au survol (v1.0.83).
 
-**Implémentation** (`dashboard.js`, `dashboard.css`) : `assignStackSiteLayout` retourne cartes visibles + item `stack-overflow` ; rangées `.stack-slot-row` (flex, gap 4 px) ; `openStackSlotSitesModal` (liste sites → `openStackSiteCardModal`) ; mode **Précis** inchangé.
+**Implémentation** (`dashboard.js`, `dashboard.css`) : `buildDisplayItems` appelle `assignStackSiteLayout` en Actif et `fuseOverlappingActiveItems` en Ouvert ; `useActiveColumn` désactivé (lanes absolues) ; styles fused sous `.mode-open` ; `formatGroupLabel` retire `www.`.
 
 ## Correctif - panneau ≡ vide sur carte site (v1.0.42)
 
@@ -702,6 +704,18 @@ Le changement de focus enregistre une activité lgre **uniquement** sur l'onglet
 
 | Version | Date | Notes |
 |---------|------|-------|
+| **1.0.92** | 2026-09-22 | Stats jour : bouton Résumé → export CSV des sessions du jour - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.91** | 2026-08-21 | Calendrier Actif : plancher titre seul, détail au survol - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.90** | 2026-08-21 | Calendrier Actif : mini-graphique O/A vertical (style modal) dans les cartes - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.89** | 2026-08-21 | Calendrier Actif : bandes vertes verticales (rafales d'activité dans la plage) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.88** | 2026-08-20 | Calendrier : O/A cartes = union temporelle par site (pas somme onglets parallèles) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.87** | 2026-08-20 | Calendrier : zoom vertical 400 % par défaut (semaine courante) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.86** | 2026-08-20 | Logo horloge (icônes Chrome + en-têtes UI) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.85** | 2026-08-20 | Stats doughnuts/légende : union temporelle par site (fin double comptage onglets parallèles) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.84** | 2026-08-20 | Calendrier : présentation Actif (côte à côte) ↔ Ouvert (fusion) inversée - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.83** | 2026-08-20 | Calendrier : cartes compactes (nom seul au repos, détail au survol), durée Actif sans « actif », `formatGroupLabel` sans `www.` - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.82** | 2026-06-24 | Calendrier Actif : blocs fusionnés superposés + plancher lisible - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.81** | 2026-06-24 | Calendrier Actif : pile verticale, fusion rafales, cartes compactes - voir [CHANGELOG.md](./CHANGELOG.md) |
 | **1.0.78** | 2026-06-03 | Stats : barres 14 j + chronologie activité remplissent la hauteur des cartes bento (`chart-grow-wrap`, resize debounced) - voir [CHANGELOG.md](./CHANGELOG.md) |
 | **1.0.77** | 2026-06-03 | Stats légende dual : barres A/O strictement proportionnelles (suppression plancher 2 % + min-width CSS) - voir [CHANGELOG.md](./CHANGELOG.md) |
 | **1.0.76** | 2026-06-03 | Stats légende semaine dual : barres A/O sur échelle commune (max Ouvert liste) - voir [CHANGELOG.md](./CHANGELOG.md) |
@@ -787,7 +801,7 @@ Le changement de focus enregistre une activité lgre **uniquement** sur l'onglet
 
 ## 0tat du projet
 
-- Extension MV3 fonctionnelle (v1.0.78)
+- Extension MV3 fonctionnelle (v1.0.92)
 - Popup, options, dashboard calendrier + stats Chart.js
 - Modal détail bloc calendrier (URL / groupe en liens sécurisés) ; panneau liste multi-onglets (créneaux chevauchants, lignes par `groupKey`)
 - Popup : onglets suivis regroupés par site/groupe (totaux O/A), compteur groupes/onglets dans l"en-tête de liste, et schéma temporel "sessions du jour" (Chart.js)

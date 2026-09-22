@@ -29,6 +29,17 @@ body {
   padding: 16px 20px;
   border-bottom: 1px solid var(--grid);
 }
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.app-logo {
+  flex-shrink: 0;
+  border-radius: 22%;
+  display: block;
+}
 .topbar h1 { font-size: 1.1rem; }
 .week-label { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
 .topbar-actions {
@@ -455,6 +466,26 @@ body {
 }
 .block.consolidated .block-title { color: #fff; }
 
+/* Mode Ouvert : au repos titre seul ; survol / focus → plage + A · O. */
+.calendar-wrap.mode-open .block.consolidated:not(.stack-slot-more) .block-url,
+.calendar-wrap.mode-open .block.consolidated:not(.stack-slot-more) .block-meta {
+  display: none;
+}
+.calendar-wrap.mode-open .block.consolidated:not(.stack-slot-more):hover .block-url,
+.calendar-wrap.mode-open .block.consolidated:not(.stack-slot-more):focus-within .block-url,
+.calendar-wrap.mode-open .block.consolidated:not(.stack-slot-more):hover .block-meta,
+.calendar-wrap.mode-open .block.consolidated:not(.stack-slot-more):focus-within .block-meta {
+  display: block;
+}
+.calendar-wrap.mode-open .block.consolidated:not(.stack-slot-more) {
+  transition: padding 0.15s ease, min-height 0.15s ease;
+}
+.calendar-wrap.mode-open .block.consolidated:not(.stack-slot-more):hover,
+.calendar-wrap.mode-open .block.consolidated:not(.stack-slot-more):focus-within {
+  padding: 6px 8px;
+  min-height: 44px;
+}
+
 /* Même créneau 15 min : sites côte à côte (max 4 + « +N »). */
 .stack-slot-row {
   position: absolute;
@@ -483,6 +514,160 @@ body {
   text-overflow: ellipsis;
 }
 .stack-slot-row .block.stack-slot-card:hover {
+  filter: brightness(1.12);
+}
+
+/* Mini-graphique O/A vertical (style modal, timeline haut → bas). */
+.calendar-wrap.mode-active .block.consolidated.block-active-compact {
+  padding: 5px 7px;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  transition: padding 0.15s ease, min-height 0.15s ease;
+  overflow: hidden;
+}
+.calendar-wrap.mode-active .block-active-spark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 10%;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+  opacity: 0.45;
+}
+.calendar-wrap.mode-active .block-active-spark-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.calendar-wrap.mode-active .block-active-spark-open {
+  fill: rgba(107, 114, 128, 0.18);
+  stroke: rgba(107, 114, 128, 0.4);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.calendar-wrap.mode-active .block-active-spark-active {
+  fill: rgba(40, 167, 69, 0.28);
+  stroke: rgba(40, 167, 69, 0.55);
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+}
+.calendar-wrap.mode-active .block-active-compact .block-title,
+.calendar-wrap.mode-active .block-active-compact .block-url,
+.calendar-wrap.mode-active .block-active-compact .block-meta {
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+.calendar-wrap.mode-active .block-active-compact .block-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.calendar-wrap.mode-active .block-active-compact .block-url {
+  color: var(--green);
+  font-weight: 600;
+  font-size: 0.66rem;
+}
+.calendar-wrap.mode-active .block-active-compact .block-meta {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+/* Repos : nom du site seul ; survol / focus : durée + plage (carte s'agrandit). */
+.calendar-wrap.mode-active .block-active-compact .block-url,
+.calendar-wrap.mode-active .block-active-compact .block-meta {
+  display: none;
+}
+.calendar-wrap.mode-active .block-active-compact:hover .block-url,
+.calendar-wrap.mode-active .block-active-compact:focus-within .block-url,
+.calendar-wrap.mode-active .block-active-compact:hover .block-meta,
+.calendar-wrap.mode-active .block-active-compact:focus-within .block-meta {
+  display: block;
+}
+.calendar-wrap.mode-active .block-active-compact:hover,
+.calendar-wrap.mode-active .block-active-compact:focus-within {
+  height: auto !important;
+  min-height: 52px;
+  padding: 6px 8px;
+  overflow: visible;
+  z-index: 95;
+}
+/* Plus de masquage de la plage sur les cartes courtes au survol. */
+.calendar-wrap.mode-active .block.stack-slot-more {
+  min-height: 22px;
+  justify-content: center;
+}
+
+/* Vue Ouvert (v1.0.84) : bloc fusionné multi-lignes (ex-Actif). */
+.calendar-wrap.mode-open .block.active-fused-block {
+  padding: 6px 7px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+.calendar-wrap.mode-open .active-fused-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-height: 0;
+}
+.calendar-wrap.mode-open .active-fused-line {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 0 6px;
+  align-items: baseline;
+  width: 100%;
+  min-height: 22px;
+  padding: 3px 5px 3px 6px;
+  border: none;
+  border-left: 3px solid var(--site-accent, rgba(255, 255, 255, 0.25));
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.28);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.calendar-wrap.mode-open .active-fused-line:hover {
+  background: rgba(0, 0, 0, 0.42);
+  filter: brightness(1.08);
+}
+.calendar-wrap.mode-open .active-fused-site {
+  grid-column: 1;
+  grid-row: 1;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.calendar-wrap.mode-open .active-fused-dur {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--green);
+  font-size: 0.64rem;
+  font-weight: 600;
+  white-space: nowrap;
+  display: none;
+}
+.calendar-wrap.mode-open .active-fused-time {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  color: var(--muted);
+  font-size: 0.6rem;
+  display: none;
+}
+.calendar-wrap.mode-open .active-fused-line:hover .active-fused-dur,
+.calendar-wrap.mode-open .active-fused-line:focus-visible .active-fused-dur,
+.calendar-wrap.mode-open .active-fused-line:hover .active-fused-time,
+.calendar-wrap.mode-open .active-fused-line:focus-visible .active-fused-time {
+  display: block;
 }
 .block.stack-slot-more {
   display: flex;
@@ -1032,6 +1217,29 @@ body {
 }
 .doughnut-legend-bar-fill--open {
   opacity: 0.55;
+}
+.chart-card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.btn-summary {
+  background: transparent;
+  border: 1px solid rgba(40, 167, 69, 0.45);
+  color: var(--green);
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.btn-summary:hover {
+  background: rgba(40, 167, 69, 0.12);
+}
+.btn-summary:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
 }
 .stats-metric-toggle {
   display: inline-flex;

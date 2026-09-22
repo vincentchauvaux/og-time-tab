@@ -27,10 +27,16 @@ const SLOT_MIN = 30;
 const SLOT_H_BASE = 32;
 /** Hauteur visuelle minimale d'un bloc en mode empile (minutes sur l'echelle du calendrier). */
 const MIN_BLOCK_MINUTES = 15;
-/** Hauteur visuelle minimale en mode Actif (sessions courtes cliquables). */
-const ACTIVE_MIN_VISUAL_MINUTES = 5;
+/** Hauteur visuelle minimale en mode Actif (sessions courtes) — détail au survol. */
+const ACTIVE_MIN_VISUAL_MINUTES = 2;
 /** Seuil minimal de temps actif pour afficher une carte en mode Actif. */
 const ACTIVE_MIN_DISPLAY_SECONDS = 30;
+/** Hauteur minimale d'une carte Actif isolée (px) : titre seul. */
+const ACTIVE_SINGLE_READABLE_MIN_PX = 22;
+/** Hauteur minimale d'une ligne dans un bloc Actif fusionné (px). */
+const ACTIVE_FUSED_LINE_MIN_PX = 22;
+/** Padding interne bloc Actif fusionné (px). */
+const ACTIVE_FUSED_PAD_PX = 6;
 /** Hauteur minimale des cartes dans une rangée horizontale (px). */
 const STACK_SLOT_CARD_MIN_PX = 28;
 /** Ecart max (min) pour fusionner des sessions en mode empile. */
@@ -51,13 +57,17 @@ const CALENDAR_VIEW_MODE_STORAGE = "ogTimeTabCalendarViewMode";
 const CALENDAR_ZOOM_Y_MIN = 0.5;
 const CALENDAR_ZOOM_Y_MAX = 4;
 /** Zoom par défaut sans préférence session : semaine courante vs autres semaines. */
-const CALENDAR_ZOOM_Y_DEFAULT_PRESENT = 2;
+const CALENDAR_ZOOM_Y_DEFAULT_PRESENT = 4;
 const CALENDAR_ZOOM_Y_DEFAULT_OTHER = 1;
 /** Cartes site visibles côte à côte au même créneau (mode empilé). */
 const STACK_SITE_VISIBLE_MAX = 4;
+/** Mode Actif : max cartes visibles par créneau (le reste en « +N »). */
+const ACTIVE_SITE_VISIBLE_MAX = 2;
 const LIVE_END_GRACE_MS = 15000;
-/** Binning temporel du layout côte à côte en mode Actif (plus fin que Ouvert). */
-const ACTIVE_STACK_BIN_MINUTES = 5;
+/** Créneau de regroupement layout mode Actif (aligné sur 15 min comme Ouvert). */
+const ACTIVE_STACK_BIN_MINUTES = 15;
+/** Fusion de rafales actives du même site si écart ≤ N minutes. */
+const ACTIVE_MERGE_GAP_MINUTES = 20;
 /** Ecart (px) entre cartes dans une rangée `.stack-slot-row`. */
 const STACK_SITE_SLOT_GAP_PX = 4;
 /** Binning du mini chart des modales calendrier (minutes). */
@@ -80,6 +90,44 @@ function coerceOpenActiveSeconds(openSeconds, activeSeconds) {
   const a = toFiniteSeconds(activeSeconds, 0);
   const o = toFiniteSeconds(openSeconds, a);
   return { openSeconds: Math.max(o, a), activeSeconds: a };
+}
+
+/**
+ * Métriques O/A pour une carte site : union temporelle des plages d'ouverture
+ * (évite le double comptage des onglets parallèles du même site).
+ * @param {object[]} members
+ * @returns {{ openSeconds: number, activeSeconds: number }}
+ */
+function memberOpenActiveMetrics(members) {
+  const list = members || [];
+  if (!list.length) return { openSeconds: 0, activeSeconds: 0 };
+  const nowTs = Date.now();
+  /** @type {{ startMs: number, endMs: number }[]} */
+  const openIntervals = [];
+  let activeSum = 0;
+  let openSumFallback = 0;
+  for (const m of list) {
+    const secs = coerceOpenActiveSeconds(m.openSeconds, m.activeSeconds);
+    activeSum += secs.activeSeconds;
+    openSumFallback += secs.openSeconds;
+    const startMs = toTimestamp(m.start);
+    let endMs = toTimestamp(m.end);
+    if (m.isLive) endMs = Math.max(endMs || 0, nowTs);
+    if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs) {
+      openIntervals.push({ startMs, endMs });
+    } else if (secs.openSeconds > 0 && Number.isFinite(startMs)) {
+      openIntervals.push({
+        startMs,
+        endMs: startMs + secs.openSeconds * 1000
+      });
+    }
+  }
+  const openUnion = unionDurationSeconds(mergeIntervals(openIntervals));
+  const openSeconds = openUnion > 0 ? openUnion : openSumFallback;
+  return {
+    openSeconds,
+    activeSeconds: Math.min(openSeconds, activeSum)
+  };
 }
 
 function isTrackableStatsUrl(url) {
@@ -330,6 +378,10 @@ document.querySelectorAll(".chart-card--day .stats-metric-btn").forEach((btn) =>
   });
 });
 
+document.getElementById("stats-day-export-csv")?.addEventListener("click", () => {
+  exportStatsDaySummaryCsv();
+});
+
 document.querySelectorAll(".chart-card--insights .stats-metric-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     const scope = btn.dataset.insightsScope;
@@ -542,7 +594,7 @@ function loadCalendarZoomY() {
   return resolveCalendarZoomY();
 }
 
-/** Sans clé `ogTimeTabCalendarZoomY` : 200 % sur la semaine courante, 100 % ailleurs. */
+/** Sans clé `ogTimeTabCalendarZoomY` : 400 % sur la semaine courante, 100 % ailleurs. */
 function syncCalendarZoomForDisplayedWeek() {
   if (hasSavedCalendarZoomY()) return;
   const target = defaultCalendarZoomYForDisplayedWeek();
@@ -573,6 +625,11 @@ function applyCalendarMetricUi() {
     btn.classList.toggle("active", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
+  const wrap = document.querySelector(".calendar-wrap");
+  if (wrap) {
+    wrap.classList.toggle("mode-active", calendarMetric === "active");
+    wrap.classList.toggle("mode-open", calendarMetric === "open");
+  }
 }
 
 /** @param {"open"|"active"} metric */
@@ -667,6 +724,114 @@ function formatStatsDayLabel(dayKey) {
     month: "short",
     year: "numeric"
   });
+}
+
+function csvEscapeCell(value) {
+  const s = String(value ?? "");
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function formatCsvDateTime(ts) {
+  const d = new Date(toTimestamp(ts));
+  if (!Number.isFinite(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${y}-${m}-${day} ${hh}:${mm}:${ss}`;
+}
+
+/**
+ * Toutes les sessions du jour sélectionné (historique + live) pour export CSV.
+ * @param {string} dayKey
+ * @param {object[]} entries
+ * @param {{ tabs?: object[] }} live
+ */
+function collectDaySummaryRows(dayKey, entries, live) {
+  const rows = [];
+  const nowTs = Date.now();
+  for (const e of entries || []) {
+    if (e.date !== dayKey) continue;
+    const secs = coerceOpenActiveSeconds(e.openSeconds, e.activeSeconds);
+    rows.push({
+      date: dayKey,
+      titre: e.title || "",
+      url: e.url || "",
+      groupe: e.groupKey || "",
+      debut: formatCsvDateTime(e.start),
+      fin: formatCsvDateTime(e.end),
+      ouvert_secondes: secs.openSeconds,
+      actif_secondes: secs.activeSeconds,
+      ouvert: formatDurationShort(secs.openSeconds),
+      actif: formatDurationShort(secs.activeSeconds),
+      source: "historique"
+    });
+  }
+  for (const t of live?.tabs || []) {
+    const tabDay = dateKeyFromTs(t.segmentStart || t.openedAt);
+    if (tabDay !== dayKey) continue;
+    const secs = coerceOpenActiveSeconds(t.openSeconds, t.activeSeconds);
+    rows.push({
+      date: dayKey,
+      titre: t.title || "",
+      url: t.url || "",
+      groupe: t.groupKey || "",
+      debut: formatCsvDateTime(t.segmentStart || t.openedAt),
+      fin: formatCsvDateTime(nowTs),
+      ouvert_secondes: secs.openSeconds,
+      actif_secondes: secs.activeSeconds,
+      ouvert: formatDurationShort(secs.openSeconds),
+      actif: formatDurationShort(secs.activeSeconds),
+      source: "live"
+    });
+  }
+  rows.sort((a, b) => String(a.debut).localeCompare(String(b.debut)));
+  return rows;
+}
+
+function buildDaySummaryCsv(rows) {
+  const headers = [
+    "date",
+    "titre",
+    "url",
+    "groupe",
+    "debut",
+    "fin",
+    "ouvert_secondes",
+    "actif_secondes",
+    "ouvert",
+    "actif",
+    "source"
+  ];
+  const lines = [headers.join(",")];
+  for (const row of rows) {
+    lines.push(headers.map((h) => csvEscapeCell(row[h])).join(","));
+  }
+  return `\uFEFF${lines.join("\r\n")}`;
+}
+
+function downloadTextFile(filename, text, mime = "text/csv;charset=utf-8") {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/** Export CSV de toutes les sessions du jour affiché (Répartition par jour). */
+function exportStatsDaySummaryCsv() {
+  const dayKey = statsSelectedDay;
+  const rows = collectDaySummaryRows(dayKey, cachedEntries, cachedLive);
+  const csv = buildDaySummaryCsv(rows);
+  downloadTextFile(`og-time-tab-resume-${dayKey}.csv`, csv);
 }
 
 /** @param {string} dayKey @param {{ skipRender?: boolean }} [options] */
@@ -823,7 +988,17 @@ function minBlockHeightPx() {
 function activeMinBlockHeightPx() {
   return Math.max(
     (ACTIVE_MIN_VISUAL_MINUTES / SLOT_MIN) * slotHPx,
-    STACK_SLOT_CARD_MIN_PX
+    ACTIVE_SINGLE_READABLE_MIN_PX
+  );
+}
+
+/** Hauteur minimale d'un bloc Actif fusionné selon le nombre de lignes. */
+function activeFusedMinHeightPx(lineCount) {
+  const n = Math.max(1, lineCount);
+  return (
+    ACTIVE_FUSED_PAD_PX * 2 +
+    n * ACTIVE_FUSED_LINE_MIN_PX +
+    Math.max(0, n - 1) * 2
   );
 }
 
@@ -836,13 +1011,15 @@ function calendarBlockMinHeightPx() {
  * Si la durée réelle est plus courte que le plancher lisible, on étend vers le haut
  * (pas vers le bas) pour ne pas dépasser visuellement l'heure de fin.
  */
-function layoutBlockVerticalRange(startMin, endMin, useMinBlockHeight) {
+function layoutBlockVerticalRange(startMin, endMin, useMinBlockHeight, minHeightPxOverride) {
   const start = clampCalendarMinutes(startMin);
   const end = clampCalendarMinutes(endMin);
   const topBase = timeToY(start);
   const endY = timeToY(end);
   const realDurationPx = Math.max(0, endY - topBase);
-  const minH = useMinBlockHeight ? calendarBlockMinHeightPx() : 0;
+  const minH = useMinBlockHeight
+    ? minHeightPxOverride ?? calendarBlockMinHeightPx()
+    : 0;
   const height = Math.max(realDurationPx, minH);
   const top = height > realDurationPx ? endY - height : topBase;
   const realHeightFrac =
@@ -1068,6 +1245,201 @@ function blocksTimeOverlap(a, b) {
   return a.visualStartMin < b.visualEndMin && b.visualStartMin < a.visualEndMin;
 }
 
+/** Fusionne les rafales actives du même site si elles sont proches (vue Actif plus lisible). */
+function mergeSameSiteActiveBlocks(dayBlocks) {
+  if (!dayBlocks.length) return dayBlocks;
+  const sorted = [...dayBlocks].sort((a, b) => a.visualStartMin - b.visualStartMin);
+  /** @type {object[]} */
+  const out = [];
+  let cur = null;
+  for (const b of sorted) {
+    const key = b.groupKey || "?";
+    const gap = cur ? b.visualStartMin - cur.visualEndMin : Infinity;
+    const segment = {
+      visualStartMin: b.visualStartMin,
+      visualEndMin: b.visualEndMin,
+      activeSeconds: b.activeSeconds || 0
+    };
+    if (!cur || cur.groupKey !== key || gap > ACTIVE_MERGE_GAP_MINUTES) {
+      if (cur) out.push(cur);
+      cur = {
+        ...b,
+        activeSegments: b.activeSegments?.length ? [...b.activeSegments] : [segment]
+      };
+      continue;
+    }
+    cur.activeSeconds = (cur.activeSeconds || 0) + (b.activeSeconds || 0);
+    cur.openSeconds = (cur.openSeconds || 0) + (b.openSeconds || 0);
+    cur.visualEndMin = Math.max(cur.visualEndMin, b.visualEndMin);
+    cur.end = Math.max(cur.end, b.end);
+    if (!cur.activeSegments) cur.activeSegments = [];
+    if (b.activeSegments?.length) cur.activeSegments.push(...b.activeSegments);
+    else cur.activeSegments.push(segment);
+    if (b.lastActivityAt && (!cur.lastActivityAt || b.lastActivityAt > cur.lastActivityAt)) {
+      cur.lastActivityAt = b.lastActivityAt;
+    }
+    if (b.isLive) cur.isLive = true;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/**
+ * Segments actifs (minutes colonne) pour une carte site — union visuelle des rafales.
+ * @param {object} item
+ * @returns {{ visualStartMin: number, visualEndMin: number }[]}
+ */
+function collectActiveSegmentsForItem(item) {
+  /** @type {{ visualStartMin: number, visualEndMin: number }[]} */
+  const raw = [];
+  for (const m of item.members || []) {
+    if (Array.isArray(m.activeSegments) && m.activeSegments.length) {
+      for (const seg of m.activeSegments) {
+        if (seg.visualEndMin > seg.visualStartMin) {
+          raw.push({
+            visualStartMin: seg.visualStartMin,
+            visualEndMin: seg.visualEndMin
+          });
+        }
+      }
+    } else if (m.visualEndMin > m.visualStartMin) {
+      raw.push({
+        visualStartMin: m.visualStartMin,
+        visualEndMin: m.visualEndMin
+      });
+    }
+  }
+  if (!raw.length) return [];
+  const sorted = raw.sort((a, b) => a.visualStartMin - b.visualStartMin);
+  const merged = [];
+  let cur = { ...sorted[0] };
+  for (let i = 1; i < sorted.length; i++) {
+    const s = sorted[i];
+    if (s.visualStartMin <= cur.visualEndMin) {
+      cur.visualEndMin = Math.max(cur.visualEndMin, s.visualEndMin);
+      continue;
+    }
+    merged.push(cur);
+    cur = { ...s };
+  }
+  merged.push(cur);
+  return merged;
+}
+
+/**
+ * Série O/A pour mini-graphique carte Actif (buckets sur la plage visuelle).
+ * @param {object} item
+ * @returns {{ open: number[], active: number[] } | null}
+ */
+function buildActiveCardSparkSeries(item) {
+  const spanStart = item.visualStartMin;
+  const spanEnd = item.visualEndMin;
+  const span = spanEnd - spanStart;
+  if (!(span > 0)) return null;
+
+  const targetBuckets = 28;
+  const bucketMin = Math.max(0.5, span / targetBuckets);
+  const n = Math.max(2, Math.ceil(span / bucketMin));
+  const open = new Array(n).fill(0);
+  const active = new Array(n).fill(0);
+
+  const addCoverage = (arr, fromMin, toMin) => {
+    const a = Math.max(spanStart, fromMin);
+    const b = Math.min(spanEnd, toMin);
+    if (!(b > a)) return;
+    const i0 = Math.max(0, Math.floor((a - spanStart) / bucketMin));
+    const i1 = Math.min(n - 1, Math.floor((b - spanStart - 1e-9) / bucketMin));
+    for (let i = i0; i <= i1; i++) {
+      const bucketStart = spanStart + i * bucketMin;
+      const bucketEnd = Math.min(spanEnd, bucketStart + bucketMin);
+      const overlap = Math.min(b, bucketEnd) - Math.max(a, bucketStart);
+      if (overlap > 0) arr[i] += overlap / Math.max(bucketEnd - bucketStart, 1e-9);
+    }
+  };
+
+  for (const m of item.members || []) {
+    const colDay = addDays(weekStart, item.dayIdx ?? 0);
+    colDay.setHours(0, 0, 0, 0);
+    const dayMid = colDay.getTime();
+    const oStart = m.start != null ? (toTimestamp(m.start) - dayMid) / 60000 : m.visualStartMin;
+    const oEnd = m.isLive
+      ? (Date.now() - dayMid) / 60000
+      : m.end != null
+      ? (toTimestamp(m.end) - dayMid) / 60000
+      : m.visualEndMin;
+    addCoverage(open, oStart, oEnd);
+  }
+
+  for (const seg of collectActiveSegmentsForItem(item)) {
+    addCoverage(active, seg.visualStartMin, seg.visualEndMin);
+  }
+
+  // Cap 0..1 et garantir A ≤ O par bucket.
+  for (let i = 0; i < n; i++) {
+    open[i] = Math.min(1, open[i]);
+    active[i] = Math.min(open[i], Math.min(1, active[i]));
+  }
+  return { open, active };
+}
+
+/** Chemin SVG aire (x = intensité 0..100, y = temps 0..100 haut→bas). */
+function sparkSeriesToAreaPath(values) {
+  const n = values.length;
+  if (!n) return "";
+  const parts = [`M 0 0`];
+  for (let i = 0; i < n; i++) {
+    const y = n === 1 ? 0 : (i / (n - 1)) * 100;
+    const x = Math.max(0, Math.min(100, values[i] * 100));
+    parts.push(`L ${x.toFixed(2)} ${y.toFixed(2)}`);
+  }
+  parts.push(`L 0 100 Z`);
+  return parts.join(" ");
+}
+
+/**
+ * Mini-graphique O/A vertical dans la carte Actif (style modal, timeline haut → bas).
+ * @param {HTMLElement} el
+ * @param {object} item
+ */
+function syncActiveStripes(el, item) {
+  let layer = el.querySelector(".block-active-spark");
+  if (calendarMetric !== "active" || item.type === "stack-overflow") {
+    if (layer) layer.remove();
+    el.querySelector(".block-active-stripes")?.remove();
+    return;
+  }
+  const series = buildActiveCardSparkSeries(item);
+  if (!series || (!series.open.some((v) => v > 0.02) && !series.active.some((v) => v > 0.02))) {
+    if (layer) layer.remove();
+    return;
+  }
+
+  const structKey = `${series.open.map((v) => v.toFixed(2)).join(",")}|${series.active
+    .map((v) => v.toFixed(2))
+    .join(",")}`;
+  if (!layer) {
+    el.querySelector(".block-active-stripes")?.remove();
+    layer = document.createElement("div");
+    layer.className = "block-active-spark";
+    layer.setAttribute("aria-hidden", "true");
+    layer.innerHTML = `<svg class="block-active-spark-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <path class="block-active-spark-open"></path>
+      <path class="block-active-spark-active"></path>
+    </svg>`;
+    el.prepend(layer);
+  }
+  if (layer.dataset.sparkKey === structKey) return;
+  layer.dataset.sparkKey = structKey;
+  const openPath = layer.querySelector(".block-active-spark-open");
+  const activePath = layer.querySelector(".block-active-spark-active");
+  if (openPath) openPath.setAttribute("d", sparkSeriesToAreaPath(series.open));
+  if (activePath) activePath.setAttribute("d", sparkSeriesToAreaPath(series.active));
+}
+
+function siteVisibleMaxForMetric() {
+  return calendarMetric === "active" ? ACTIVE_SITE_VISIBLE_MAX : STACK_SITE_VISIBLE_MAX;
+}
+
 function blocksStackClusterable(a, b) {
   const ar = clusterVisualRange(a);
   const br = clusterVisualRange(b);
@@ -1234,6 +1606,90 @@ function buildActiveDisplayItems(dayIdx, clusters) {
   return buildMetricDisplayItems(dayIdx, clusters, "active");
 }
 
+function activeGroupItemsOverlap(a, b) {
+  return a.visualStartMin < b.visualEndMin && b.visualStartMin < a.visualEndMin;
+}
+
+/** @param {object[]} groupItems */
+function buildActiveFusedItem(groupItems) {
+  const lines = [...groupItems].sort((a, b) => {
+    if (a.visualStartMin !== b.visualStartMin) return a.visualStartMin - b.visualStartMin;
+    return (a.groupKey || "").localeCompare(b.groupKey || "");
+  });
+  const dayIdx = lines[0].dayIdx;
+  const visualStartMin = Math.min(...lines.map((l) => l.visualStartMin));
+  const visualEndMin = Math.max(...lines.map((l) => l.visualEndMin));
+  const domKey = `af:${dayIdx}:${lines
+    .map((l) => l.domKey)
+    .sort()
+    .join("|")}`;
+  return {
+    type: "active-fused",
+    domKey,
+    dayIdx,
+    lines,
+    lineCount: lines.length,
+    start: Math.min(...lines.map((l) => l.start)),
+    end: Math.max(...lines.map((l) => l.end)),
+    displayStart: minutesToTimestamp(dayIdx, visualStartMin),
+    displayEnd: minutesToTimestamp(dayIdx, visualEndMin),
+    visualStartMin,
+    visualEndMin
+  };
+}
+
+/**
+ * Mode Actif : blocs qui se chevauchent → un seul bloc fusionné (lignes chronologiques).
+ * @param {object[]} items
+ * @returns {object[]}
+ */
+function fuseOverlappingActiveItems(items) {
+  const groups = items.filter((it) => it.type === "group");
+  const others = items.filter((it) => it.type !== "group");
+  if (groups.length === 0) return items;
+
+  const n = groups.length;
+  const parent = groups.map((_, i) => i);
+  const find = (i) => {
+    if (parent[i] !== i) parent[i] = find(parent[i]);
+    return parent[i];
+  };
+  const union = (i, j) => {
+    const ri = find(i);
+    const rj = find(j);
+    if (ri !== rj) parent[ri] = rj;
+  };
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (activeGroupItemsOverlap(groups[i], groups[j])) union(i, j);
+    }
+  }
+
+  /** @type {Map<number, object[]>} */
+  const clusters = new Map();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    if (!clusters.has(r)) clusters.set(r, []);
+    clusters.get(r).push(groups[i]);
+  }
+
+  const out = [];
+  for (const cluster of clusters.values()) {
+    if (cluster.length === 1) {
+      clearStackSlotRowProps(cluster[0]);
+      clearLaneProps(cluster[0]);
+      out.push(cluster[0]);
+      continue;
+    }
+    for (const it of cluster) {
+      clearStackSlotRowProps(it);
+      clearLaneProps(it);
+    }
+    out.push(buildActiveFusedItem(cluster));
+  }
+  return [...out, ...others];
+}
+
 function clearStackSlotRowProps(it) {
   delete it.stackSlotKey;
   delete it.stackLaneCount;
@@ -1270,7 +1726,7 @@ function buildStackSlotOverflowItem(group, stackSlotKey, slotStartMin, slotEndMi
     stackSlotEndMin: slotEndMin,
     stackLaneCount: group.length,
     slotItems: group.slice(),
-    overflowExtra: group.length - STACK_SITE_VISIBLE_MAX,
+    overflowExtra: group.length - siteVisibleMaxForMetric(),
     start: Math.min(...group.map((it) => it.start)),
     end: Math.max(...group.map((it) => it.end)),
     visualStartMin: slotStartMin,
@@ -1286,6 +1742,9 @@ function buildStackSlotOverflowItem(group, stackSlotKey, slotStartMin, slotEndMi
  */
 function assignStackSiteLayout(items) {
   const binMinutes = stackLayoutBinMinutes();
+  const visibleMax = siteVisibleMaxForMetric();
+  /* Actif utilise les lanes horizontales (ex-Ouvert) ; pile verticale désactivée. */
+  const useActiveColumn = false;
   /** @type {Map<string, object[]>} */
   const bySlot = new Map();
   for (const it of items) {
@@ -1305,26 +1764,40 @@ function assignStackSiteLayout(items) {
       out.push(group[0]);
       continue;
     }
-    group.sort((a, b) => (a.groupKey || "").localeCompare(b.groupKey || ""));
-    const visibleCount = Math.min(STACK_SITE_VISIBLE_MAX, group.length);
+    group.sort((a, b) => {
+      const aA = a.members.reduce((s, m) => s + m.activeSeconds, 0);
+      const bA = b.members.reduce((s, m) => s + m.activeSeconds, 0);
+      if (bA !== aA) return bA - aA;
+      return (a.groupKey || "").localeCompare(b.groupKey || "");
+    });
+    const slotStartMin = Math.min(...group.map((it) => it.visualStartMin));
+    const slotEndMin = Math.max(...group.map((it) => it.visualEndMin));
+    const visibleCount = Math.min(visibleMax, group.length);
     const slotColorMap = assignColorsForItems(group.map((it) => ({ groupKey: it.groupKey || "?" })));
     const n = group.length;
+    const laneTotal = visibleCount + (n > visibleMax ? 1 : 0);
     for (let i = 0; i < visibleCount; i++) {
       const it = group[i];
       clearStackSlotRowProps(it);
+      if (useActiveColumn) {
+        it.stackSlotKey = slotKey;
+        it.stackSlotStartMin = slotStartMin;
+        it.stackSlotEndMin = slotEndMin;
+        it.stackLaneCount = laneTotal;
+      }
       it.lane = i;
-      it.laneCount = visibleCount + (n > STACK_SITE_VISIBLE_MAX ? 1 : 0);
+      it.laneCount = laneTotal;
       it.slotAccentColor = slotColorMap.get(it.groupKey || "?");
       out.push(it);
     }
-    if (n > STACK_SITE_VISIBLE_MAX) {
-      const slotStartMin = Math.min(...group.map((it) => it.visualStartMin));
-      const slotEndMin = Math.max(...group.map((it) => it.visualEndMin));
-      const stackSlotKey = slotKey;
-      const overflow = buildStackSlotOverflowItem(group, stackSlotKey, slotStartMin, slotEndMin);
+    if (n > visibleMax) {
+      const overflow = buildStackSlotOverflowItem(group, slotKey, slotStartMin, slotEndMin);
       clearStackSlotRowProps(overflow);
+      if (useActiveColumn) {
+        overflow.stackLaneCount = laneTotal;
+      }
       overflow.lane = visibleCount;
-      overflow.laneCount = visibleCount + 1;
+      overflow.laneCount = laneTotal;
       out.push(overflow);
     }
   }
@@ -1350,12 +1823,21 @@ function buildDisplayItems(blocks) {
   const items = [];
   for (const [dayIdx, dayBlocks] of byDay) {
     if (dayBlocks.length === 0) continue;
-    const clusters = clusterDayBlocks(dayBlocks);
+    let blocksForDay = dayBlocks;
+    if (calendarMetric === "active") {
+      blocksForDay = mergeSameSiteActiveBlocks(dayBlocks);
+    }
+    const clusters = clusterDayBlocks(blocksForDay);
     const dayItems =
       calendarMetric === "active"
         ? buildActiveDisplayItems(dayIdx, clusters)
         : buildOpenDisplayItems(dayIdx, clusters);
-    items.push(...assignStackSiteLayout(dayItems));
+    /* Présentation inversée (v1.0.84) : Actif = côte à côte (ex-Ouvert) ; Ouvert = fusion (ex-Actif). */
+    items.push(
+      ...(calendarMetric === "active"
+        ? assignStackSiteLayout(dayItems)
+        : fuseOverlappingActiveItems(dayItems))
+    );
   }
   return items;
 }
@@ -1378,6 +1860,11 @@ function calendarStructurePayload(items) {
             ln: it.lane ?? 0,
             lc: it.laneCount ?? 1
           }
+        : it.type === "active-fused"
+        ? {
+            n: it.lineCount ?? it.lines?.length ?? 0,
+            m: (it.lines || []).map((l) => l.domKey).sort()
+          }
         : it.type === "stack-overflow"
         ? {
             c: it.overflowExtra,
@@ -1395,6 +1882,19 @@ function calendarMetricsPayload(items) {
     items.map((it) => {
       if (it.type === "stack-overflow") {
         return { k: it.domKey, overflow: it.overflowExtra ?? 0 };
+      }
+      if (it.type === "active-fused") {
+        return {
+          k: it.domKey,
+          rows: (it.lines || []).map((line) => ({
+            k: line.domKey,
+            gk: line.groupKey || "",
+            a: line.members.reduce((s, m) => s + m.activeSeconds, 0),
+            o: line.members.reduce((s, m) => s + m.openSeconds, 0),
+            s: line.visualStartMin,
+            e: line.visualEndMin
+          }))
+        };
       }
       if (it.type === "single") {
         const b = it.block;
@@ -1431,8 +1931,12 @@ function blockLayout(item, cols, gridRect, options = {}) {
   const endMin = useSharedStackSlot
     ? item.stackSlotEndMin
     : item.visualEndMin ?? localMinutesFromTs(item.end);
-  const useOpenMin = options.useMinBlockHeight ?? calendarMetric === "open";
-  const vertical = layoutBlockVerticalRange(startMin, endMin, useOpenMin);
+  const useOpenMin = options.useMinBlockHeight ?? true;
+  let minHeightOverride = options.minHeightPx;
+  if (minHeightOverride == null && item.type === "active-fused") {
+    minHeightOverride = activeFusedMinHeightPx(item.lineCount ?? item.lines?.length ?? 1);
+  }
+  const vertical = layoutBlockVerticalRange(startMin, endMin, useOpenMin, minHeightOverride);
   const top = vertical.top;
   const height = vertical.height;
   const colWidth = col.offsetWidth || gridRect.width / 7;
@@ -1489,7 +1993,14 @@ function stackSlotRowLayout(item, cols, gridRect) {
   const startMin =
     item.stackSlotStartMin ?? item.visualStartMin ?? localMinutesFromTs(item.start);
   const endMin = item.stackSlotEndMin ?? item.visualEndMin ?? localMinutesFromTs(item.end);
-  const vertical = layoutBlockVerticalRange(startMin, endMin, true);
+  const useMinH = calendarMetric === "open";
+  const vertical = layoutBlockVerticalRange(startMin, endMin, useMinH);
+  if (calendarMetric === "active" && (item.laneCount ?? 0) > 1) {
+    const cardCount = item.laneCount ?? 1;
+    const stackMinH =
+      cardCount * STACK_SLOT_CARD_MIN_PX + Math.max(0, cardCount - 1) * STACK_SITE_SLOT_GAP_PX;
+    vertical.height = Math.max(vertical.height, stackMinH);
+  }
   const colWidth = col.offsetWidth || gridRect.width / 7;
   const innerWidth = colWidth - 6;
   const colLeft = col.offsetLeft - gridCols.offsetLeft;
@@ -1505,10 +2016,9 @@ function stackSlotRowLayout(item, cols, gridRect) {
 }
 
 function usesStackSlotRow(item) {
-  return (
-    item.stackSlotKey &&
-    ((item.type === "group" && (item.stackLaneCount ?? 0) > 1) || item.type === "stack-overflow")
-  );
+  if (!item.stackSlotKey) return false;
+  if (item.type === "stack-overflow") return true;
+  return item.type === "group" && (item.laneCount ?? 0) > 1;
 }
 
 function ensureStackSlotRow(stackSlotKey, layout) {
@@ -1580,36 +2090,116 @@ function applyBlockLayout(el, layout) {
   const frac = layout.realHeightFrac ?? 1;
   el.style.setProperty("--block-real-frac", String(frac));
   el.classList.toggle("block-readability-pad", frac < 0.999);
+  el.classList.toggle("block--short", calendarMetric === "active" && layout.height < 40);
   const endTimeEl = el.querySelector(".block-end-time");
   if (endTimeEl && layout.visualEndMin != null) {
     endTimeEl.textContent = formatClockFromMinutes(layout.visualEndMin);
-    endTimeEl.hidden = layout.height < 40;
+    endTimeEl.hidden = calendarMetric === "active" || layout.height < 40;
   }
 }
 
 function updateConsolidatedBlockContent(el, item) {
   el.className = "block consolidated";
+  if (calendarMetric === "active") el.classList.add("block-active-compact");
+  else el.classList.remove("block-active-compact");
   delete el.dataset.blockIndex;
   el.dataset.domKey = item.domKey;
   const label = stackSiteCardTitle(item);
   const titleEl = el.querySelector(".block-title");
   const urlEl = el.querySelector(".block-url");
   const metaEl = el.querySelector(".block-meta");
-  const totalA = item.members.reduce((s, m) => s + m.activeSeconds, 0);
-  const totalO = item.members.reduce((s, m) => s + m.openSeconds, 0);
+  const { openSeconds: totalO, activeSeconds: totalA } = memberOpenActiveMetrics(item.members);
   applyConsolidatedBlockStyle(el, item, totalA, totalO);
   const toggle = el.querySelector(".block-picker-toggle");
   if (toggle) toggle.remove();
-  if (titleEl) titleEl.textContent = label;
   const hasLive = item.members.some((m) => m.isLive);
   const rangeStart = item.displayStart ?? item.start;
   const rangeEnd = item.displayEnd ?? item.end;
-  if (urlEl) urlEl.textContent = formatTimeRange(rangeStart, rangeEnd, { clampToNow: hasLive });
-  if (metaEl) {
-    metaEl.textContent = `A ${formatDurationShort(totalA)} · O ${formatDurationShort(totalO)}`;
+  const timeRange = formatTimeRange(rangeStart, rangeEnd, { clampToNow: hasLive });
+  if (calendarMetric === "active") {
+    const siteLabel = item.groupKey ? formatGroupLabel(item.groupKey) : label;
+    if (titleEl) titleEl.textContent = siteLabel;
+    if (urlEl) urlEl.textContent = formatDurationShort(totalA);
+    if (metaEl) metaEl.textContent = timeRange;
+  } else {
+    const siteLabel = item.groupKey ? formatGroupLabel(item.groupKey) : label;
+    if (titleEl) titleEl.textContent = siteLabel;
+    if (urlEl) urlEl.textContent = timeRange;
+    if (metaEl) {
+      metaEl.textContent = `A ${formatDurationShort(totalA)} · O ${formatDurationShort(totalO)}`;
+    }
   }
   const siteHint = item.groupKey ? `\nSite: ${item.groupKey}` : "";
-  el.title = `${label}${siteHint}\n${formatTimeRange(rangeStart, rangeEnd, { clampToNow: hasLive })}\nActif: ${formatDurationFull(totalA)} · Ouvert: ${formatDurationFull(totalO)}\nClic : détail site (modal)`;
+  el.title = `${label}${siteHint}\n${timeRange}\nActif: ${formatDurationFull(totalA)} · Ouvert: ${formatDurationFull(totalO)}\nClic : détail site (modal)`;
+  syncActiveStripes(el, item);
+}
+
+function updateActiveFusedBlockContent(el, item) {
+  el.className = "block consolidated active-fused-block";
+  delete el.dataset.blockIndex;
+  el.dataset.domKey = item.domKey;
+  const lines = [...(item.lines || [])].sort((a, b) => {
+    if (a.visualStartMin !== b.visualStartMin) return a.visualStartMin - b.visualStartMin;
+    return (a.groupKey || "").localeCompare(b.groupKey || "");
+  });
+  let totalA = 0;
+  let totalO = 0;
+  for (const line of lines) {
+    const m = memberOpenActiveMetrics(line.members);
+    totalA += m.activeSeconds;
+    totalO += m.openSeconds;
+  }
+  applyConsolidatedBlockStyle(el, item, totalA, totalO);
+
+  const linesEl = el.querySelector(".active-fused-lines");
+  if (!linesEl) return;
+
+  const structKey = lines.map((l) => l.domKey).join("|");
+  const colorMap = assignColorsForItems(lines.map((l) => ({ groupKey: l.groupKey || "?" })));
+
+  if (el.dataset.fusedStruct !== structKey) {
+    linesEl.innerHTML = "";
+    for (const lineItem of lines) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "active-fused-line";
+      row.dataset.lineDomKey = lineItem.domKey;
+      const accent = colorMap.get(lineItem.groupKey || "?");
+      if (accent) row.style.setProperty("--site-accent", accent);
+      row.innerHTML = `<span class="active-fused-site"></span><span class="active-fused-dur"></span><span class="active-fused-time"></span>`;
+      linesEl.appendChild(row);
+    }
+    el.dataset.fusedStruct = structKey;
+  }
+
+  const rowEls = linesEl.querySelectorAll(".active-fused-line");
+  lines.forEach((lineItem, i) => {
+    const row = rowEls[i];
+    if (!row) return;
+    const siteEl = row.querySelector(".active-fused-site");
+    const durEl = row.querySelector(".active-fused-dur");
+    const timeEl = row.querySelector(".active-fused-time");
+    const { openSeconds: lineO, activeSeconds: lineA } = memberOpenActiveMetrics(lineItem.members);
+    const hasLive = lineItem.members.some((m) => m.isLive);
+    const rangeStart = lineItem.displayStart ?? lineItem.start;
+    const rangeEnd = lineItem.displayEnd ?? lineItem.end;
+    const timeRange = formatTimeRange(rangeStart, rangeEnd, { clampToNow: hasLive });
+    const siteLabel = lineItem.groupKey ? formatGroupLabel(lineItem.groupKey) : stackSiteCardTitle(lineItem);
+    if (siteEl) siteEl.textContent = siteLabel;
+    if (durEl) {
+      durEl.textContent =
+        calendarMetric === "open"
+          ? `A ${formatDurationShort(lineA)} · O ${formatDurationShort(lineO)}`
+          : formatDurationShort(lineA);
+    }
+    if (timeEl) timeEl.textContent = timeRange;
+    applyBlockActivityStyle(row, lineA, lineO);
+    row.title = `${siteLabel}\n${timeRange}\nActif: ${formatDurationFull(lineA)} · Ouvert: ${formatDurationFull(lineO)}\nClic : détail site`;
+  });
+
+  const rangeStart = item.displayStart ?? item.start;
+  const rangeEnd = item.displayEnd ?? item.end;
+  el.title = `${lines.length} sites en parallèle\n${formatTimeRange(rangeStart, rangeEnd)}\nActif total: ${formatDurationFull(totalA)}`;
 }
 
 function updateStackOverflowBlockContent(el, item) {
@@ -1661,6 +2251,20 @@ function createBlockShell(item) {
         closeBlockPicker();
         openBlockModal(item.blockIndex);
       }
+    });
+  } else if (item.type === "active-fused") {
+    el.classList.add("consolidated", "active-fused-block");
+    el.innerHTML = `<div class="active-fused-lines" role="list"></div>
+    <span class="block-end-marker" aria-hidden="true"><span class="block-end-time"></span></span>`;
+    const linesRoot = el.querySelector(".active-fused-lines");
+    linesRoot?.addEventListener("click", (e) => {
+      const row = e.target instanceof Element ? e.target.closest(".active-fused-line") : null;
+      if (!row) return;
+      e.stopPropagation();
+      const lineKey = row.dataset.lineDomKey;
+      const fused = displayItems.find((x) => x.domKey === el.dataset.domKey && x.type === "active-fused");
+      const line = fused?.lines?.find((l) => l.domKey === lineKey);
+      if (line) openStackSiteCardModal(line);
     });
   } else if (item.type === "stack-overflow") {
     el.classList.add("consolidated", "stack-slot-more");
@@ -1958,10 +2562,8 @@ function initPickerExpandedGroups(item) {
 }
 
 function pickerTotals(item) {
-  const members = item.members || [];
-  const totalA = members.reduce((s, m) => s + m.activeSeconds, 0);
-  const totalO = members.reduce((s, m) => s + m.openSeconds, 0);
-  return { totalA, totalO };
+  const { openSeconds, activeSeconds } = memberOpenActiveMetrics(item.members || []);
+  return { totalA: activeSeconds, totalO: openSeconds };
 }
 
 function pickerListStructureKey(item) {
@@ -1982,8 +2584,7 @@ function openStackSiteCardModal(item) {
   const sorted = [...item.members].sort((a, c) => c.activeSeconds - a.activeSeconds);
   const primary = sorted[0];
   const groupKey = item.groupKey || primary.groupKey || "?";
-  const totalA = sorted.reduce((s, m) => s + m.activeSeconds, 0);
-  const totalO = sorted.reduce((s, m) => s + m.openSeconds, 0);
+  const { openSeconds: totalO, activeSeconds: totalA } = memberOpenActiveMetrics(sorted);
   const inactive = Math.max(0, totalO - totalA);
   const durationMs = item.end - item.start;
   const dayKey =
@@ -2048,14 +2649,8 @@ function openStackSlotSitesModal(item) {
       b.members.reduce((s, m) => s + m.activeSeconds, 0) -
       a.members.reduce((s, m) => s + m.activeSeconds, 0)
   );
-  const totalA = sorted.reduce(
-    (s, it) => s + it.members.reduce((t, m) => t + m.activeSeconds, 0),
-    0
-  );
-  const totalO = sorted.reduce(
-    (s, it) => s + it.members.reduce((t, m) => t + m.openSeconds, 0),
-    0
-  );
+  const totalA = sorted.reduce((s, it) => s + memberOpenActiveMetrics(it.members).activeSeconds, 0);
+  const totalO = sorted.reduce((s, it) => s + memberOpenActiveMetrics(it.members).openSeconds, 0);
   const inactive = Math.max(0, totalO - totalA);
   const slotStart = Math.min(...sorted.map((it) => it.start));
   const slotEnd = Math.max(...sorted.map((it) => it.end));
@@ -2084,8 +2679,7 @@ function openStackSlotSitesModal(item) {
     const li = document.createElement("li");
     li.className = "modal-session-tab";
     li.tabIndex = 0;
-    const a = siteItem.members.reduce((s, m) => s + m.activeSeconds, 0);
-    const o = siteItem.members.reduce((s, m) => s + m.openSeconds, 0);
+    const { openSeconds: o, activeSeconds: a } = memberOpenActiveMetrics(siteItem.members);
     const label = siteItem.groupKey
       ? formatGroupLabel(siteItem.groupKey)
       : stackSiteCardTitle(siteItem);
@@ -2116,8 +2710,7 @@ function openClusterModal(item) {
     return;
   }
 
-  const totalA = item.members.reduce((s, m) => s + m.activeSeconds, 0);
-  const totalO = item.members.reduce((s, m) => s + m.openSeconds, 0);
+  const { openSeconds: totalO, activeSeconds: totalA } = memberOpenActiveMetrics(item.members);
   const inactive = Math.max(0, totalO - totalA);
   const label = stackSiteCardTitle(item);
 
@@ -2471,13 +3064,21 @@ function applyStackSlotCardLayout(el, rowLayout) {
   el.style.left = "";
   el.style.top = "";
   el.style.width = "";
-  if (rowLayout) el.style.height = `${rowLayout.height}px`;
+  if (calendarMetric === "active") {
+    el.style.height = "";
+    el.style.flex = "0 0 auto";
+  } else if (rowLayout) {
+    el.style.height = `${rowLayout.height}px`;
+    el.style.flex = "";
+  }
 }
 
 /** @param {HTMLElement} el @param {object} item @param {NodeListOf<Element>} cols @param {DOMRect} gridRect @param {boolean} forceLayout */
 function renderStackBlocks(el, item, cols, gridRect, forceLayout) {
   if (item.type === "stack-overflow") {
     updateStackOverflowBlockContent(el, item);
+  } else if (item.type === "active-fused") {
+    updateActiveFusedBlockContent(el, item);
   } else {
     updateConsolidatedBlockContent(el, item);
     if (openPickerDomKey === item.domKey) syncOpenBlockPickerList(item);
@@ -2498,7 +3099,7 @@ function renderStackBlocks(el, item, cols, gridRect, forceLayout) {
   if (el.parentElement !== blocksLayer) blocksLayer.appendChild(el);
 
   const layout = blockLayout(item, cols, gridRect, {
-    useMinBlockHeight: calendarMetric === "open"
+    useMinBlockHeight: true
   });
   if (forceLayout || !el.dataset.layoutReady) {
     applyBlockLayout(el, layout);
@@ -3436,8 +4037,81 @@ function showDashboardFatalError(err) {
     `(${message || "Erreur inconnue"})`;
 }
 
+function buildStatsWindowForDateKeys(dateKeys, nowTs = Date.now()) {
+  const ordered = [...(dateKeys instanceof Set ? dateKeys : dateKeys)]
+    .map((key) => parseDateKey(key))
+    .filter((d) => d instanceof Date && Number.isFinite(d.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+  if (!ordered.length) {
+    return { windowStartMs: nowTs, windowEndMs: nowTs, windowSpanSeconds: 0 };
+  }
+  const first = ordered[0];
+  first.setHours(0, 0, 0, 0);
+  const last = ordered[ordered.length - 1];
+  last.setHours(0, 0, 0, 0);
+  const windowStartMs = first.getTime();
+  const windowEndMs = Math.min(last.getTime() + 24 * 60 * 60 * 1000, nowTs);
+  const windowSpanSeconds = Math.max(0, Math.round((windowEndMs - windowStartMs) / 1000));
+  return { windowStartMs, windowEndMs, windowSpanSeconds };
+}
+
+function createGroupMetricRow(canonicalKey) {
+  return {
+    groupKey: canonicalKey,
+    label: formatGroupLabel(canonicalKey),
+    openSeconds: 0,
+    activeSeconds: 0,
+    seconds: 0,
+    openIntervals: [],
+    activeIntervals: []
+  };
+}
+
+function pushGroupMetricIntervals(
+  row,
+  startMs,
+  endMs,
+  openSeconds,
+  activeSeconds,
+  windowStartMs,
+  windowEndMs,
+  lastActivityAt
+) {
+  const openWindow = clipIntervalToWindow(startMs, endMs, windowStartMs, windowEndMs);
+  if (!openWindow) return;
+  row.openIntervals.push(openWindow);
+  const activeSpanMs = Math.min(openWindow.endMs - openWindow.startMs, activeSeconds * 1000);
+  if (activeSpanMs <= 0) return;
+  const anchor = Number.isFinite(Number(lastActivityAt))
+    ? Math.min(openWindow.endMs, Math.max(openWindow.startMs, toTimestamp(lastActivityAt)))
+    : openWindow.endMs;
+  row.activeIntervals.push({
+    startMs: Math.max(openWindow.startMs, anchor - activeSpanMs),
+    endMs: anchor
+  });
+}
+
+function finalizeGroupMetricRow(row, windowSpanSeconds) {
+  row.openIntervals = mergeIntervals(row.openIntervals);
+  row.activeIntervals = mergeIntervals(row.activeIntervals);
+  row.openSeconds = Math.min(windowSpanSeconds, unionDurationSeconds(row.openIntervals));
+  row.activeSeconds = Math.min(row.openSeconds, unionDurationSeconds(row.activeIntervals));
+  delete row.openIntervals;
+  delete row.activeIntervals;
+}
+
+function mergeGroupMetricRows(target, source) {
+  if (!target.openIntervals) {
+    target.openIntervals = [];
+    target.activeIntervals = [];
+  }
+  target.openIntervals.push(...(source.openIntervals || []));
+  target.activeIntervals.push(...(source.activeIntervals || []));
+}
+
 /**
  * Agrégation stats par clé canonique (source unique doughnut + légende).
+ * Union temporelle par groupe (évite le double comptage onglets parallèles).
  * @param {Set<string>|string[]} dateKeys
  * @param {object[]} entries
  * @param {{ tabs?: object[] }} live
@@ -3447,41 +4121,46 @@ function showDashboardFatalError(err) {
 function aggregateByGroupKey(dateKeys, entries, live, config, options = {}) {
   const { dualMetric = false, metric = "active" } = options;
   const allowed = dateKeys instanceof Set ? dateKeys : new Set(dateKeys);
-  /** @type {Map<string, { groupKey: string, label: string, activeSeconds: number, openSeconds: number, seconds: number }>} */
+  const nowTs = Date.now();
+  const { windowStartMs, windowEndMs, windowSpanSeconds } = buildStatsWindowForDateKeys(
+    allowed,
+    nowTs
+  );
+  /** @type {Map<string, { groupKey: string, label: string, activeSeconds: number, openSeconds: number, seconds: number, openIntervals: object[], activeIntervals: object[] }>} */
   const byCanonical = new Map();
 
-  const bump = (record) => {
+  const addRecord = (record, isLive = false) => {
     const raw = cleanStatsToken(record.groupKey || resolveStatsGroupKey(record, config) || "");
     const canonicalKey = normalizeStatsGroupKey(raw, config) || "";
     if (!canonicalKey || canonicalKey === "system") return;
     let row = byCanonical.get(canonicalKey);
     if (!row) {
-      row = {
-        groupKey: canonicalKey,
-        label: formatGroupLabel(canonicalKey),
-        activeSeconds: 0,
-        openSeconds: 0,
-        seconds: 0
-      };
+      row = createGroupMetricRow(canonicalKey);
       byCanonical.set(canonicalKey, row);
     }
-    if (dualMetric) {
-      const secs = coerceOpenActiveSeconds(record.openSeconds, record.activeSeconds);
-      row.activeSeconds += secs.activeSeconds;
-      row.openSeconds += secs.openSeconds;
-    } else {
-      row.seconds += entryMetricSeconds(record, metric);
-    }
+    const secs = coerceOpenActiveSeconds(record.openSeconds, record.activeSeconds);
+    const startMs = toTimestamp(record.start ?? record.segmentStart ?? record.openedAt);
+    const endMs = isLive ? nowTs : toTimestamp(record.end);
+    pushGroupMetricIntervals(
+      row,
+      startMs,
+      endMs,
+      secs.openSeconds,
+      secs.activeSeconds,
+      windowStartMs,
+      windowEndMs,
+      isLive ? record.lastActivityAt : undefined
+    );
   };
 
   for (const e of entries) {
     if (!allowed.has(e.date)) continue;
-    bump(e);
+    addRecord(e, false);
   }
   for (const t of live.tabs || []) {
     const dayKey = dateKeyFromTs(t.segmentStart || t.openedAt);
     if (!allowed.has(dayKey)) continue;
-    bump(t);
+    addRecord(t, true);
   }
 
   const byLabel = new Map();
@@ -3490,15 +4169,29 @@ function aggregateByGroupKey(dateKeys, entries, live, config, options = {}) {
     if (!labelKey) continue;
     const target = byLabel.get(labelKey);
     if (!target) {
-      byLabel.set(labelKey, { ...row });
+      byLabel.set(labelKey, {
+        groupKey: row.groupKey,
+        label: row.label,
+        openIntervals: [...row.openIntervals],
+        activeIntervals: [...row.activeIntervals]
+      });
       continue;
     }
-    target.activeSeconds += row.activeSeconds;
-    target.openSeconds += row.openSeconds;
-    target.seconds += row.seconds;
+    mergeGroupMetricRows(target, row);
   }
 
-  const sorted = [...byLabel.values()]
+  const finalized = [];
+  for (const row of byLabel.values()) {
+    finalizeGroupMetricRow(row, windowSpanSeconds);
+    row.seconds = dualMetric
+      ? row.activeSeconds
+      : metric === "open"
+      ? row.openSeconds
+      : row.activeSeconds;
+    finalized.push(row);
+  }
+
+  const sorted = finalized
     .sort((a, b) => {
       const score = (x) =>
         dualMetric ? Math.max(x.activeSeconds, x.openSeconds) : x.seconds;

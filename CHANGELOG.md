@@ -1,5 +1,77 @@
 # Changelog
 
+## [1.0.92] - 2026-09-22
+
+### Ajouté
+
+- **Statistiques - Répartition par jour** : bouton **Résumé** (à côté Actif/Ouvert) télécharge un CSV de **toutes les sessions du jour** sélectionné (historique + live) : titre, URL, groupe, début/fin, O/A en secondes et libellés.
+
+## [1.0.91] - 2026-08-21
+
+### Modifié
+
+- **Calendrier - mode Actif** : hauteur minimale = **titre seul** (~22 px) ; durée + plage horaire uniquement au **survol** (carte qui s'agrandit). Moins de zones hachurées sur les sessions courtes.
+
+## [1.0.90] - 2026-08-21
+
+### Modifié
+
+- **Calendrier - mode Actif** : les fines bandes sont remplacées par un **mini-graphique aire** (gris = Ouvert, vert = Actif), même langage visuel que le schéma modal, **orienté verticalement** (temps de haut en bas) dans chaque carte, limité à **10 %** de la largeur pour rester discret.
+
+## [1.0.89] - 2026-08-21
+
+### Ajouté
+
+- **Calendrier - mode Actif** : dans chaque carte, **bandes vertes verticales** (haut → bas) indiquent les rafales d'activité réelle à l'intérieur de la plage affichée (ex. 16 min actifs en 2 pics dans une box d'~1 h). Les segments sont conservés lors de la fusion des rafales du même site.
+
+## [1.0.88] - 2026-08-20
+
+### Corrigé
+
+- **Calendrier - temps Ouvert des cartes** : `O` (et totaux modal / picker) utilisent une **union temporelle** des plages d'ouverture par site, plus la somme des onglets parallèles — finit les affichages impossibles (ex. plage `10:42–13:50` avec `O 11 h`).
+
+## [1.0.87] - 2026-08-20
+
+### Modifié
+
+- **Calendrier - zoom vertical** : défaut **400 %** sur la semaine courante (sans préférence `sessionStorage`), au lieu de 200 %.
+
+## [1.0.86] - 2026-08-20
+
+### Ajouté
+
+- **Logo horloge** : icônes PNG (`icons/icon16`–`128`) pour la barre d'outils Chrome / `chrome://extensions` ; logo affiché dans les en-têtes popup, dashboard et options. Plein format (bord à bord), transparence uniquement dans les **coins arrondis**.
+
+## [1.0.85] - 2026-08-20
+
+### Corrigé
+
+- **Statistiques - répartition par jour / semaine (camemberts + légende)** : les durées Ouvert/Actif par site utilisent désormais une **union temporelle** par groupe (comme les barres 14 j et les totaux Insights), au lieu de sommer les onglets parallèles. Corrige les totaux impossibles (ex. 6 h ouvert alors que la journée écoulée est ~2 h 30).
+
+## [1.0.84] - 2026-08-20
+
+### Modifié
+
+- **Calendrier - présentation Actif ↔ Ouvert inversée** : **Actif** affiche les sessions actives en cartes **côte à côte** (lanes, max 2 + « +N ») ; **Ouvert** affiche les onglets ouverts en **bloc fusionné** multi-lignes lorsque les plages se chevauchent. Données inchangées (filtre actif / plages ouvertes). Compact au survol et libellés v1.0.83 conservés.
+
+## [1.0.83] - 2026-08-20
+
+### Modifié
+
+- **Calendrier - cartes plus lisibles** : au repos, les cartes **Ouvert** et **Actif** n'affichent que le **nom de site** (hostname sans `www.`) ; au **survol** / focus, révélation de la plage et des durées. En mode Actif, la durée n'affiche plus le suffixe « actif » (ex. `18 min` seul). Layout fusionné Actif et toggle Ouvert/Actif inchangés ; clic → modal détail inchangée.
+
+## [1.0.82] - 2026-06-24
+
+### Modifié
+
+- **Calendrier - vue Actif (lisibilité v2)** : plancher visuel relevé (**10 min** / **48 px**) pour les sessions courtes isolées. Les blocs qui **se chevauchent** sont fusionnés en **un seul bloc** avec une ligne par site, empilées dans l'**ordre chronologique** (site, durée active, plage horaire) ; clic sur une ligne → modal du site.
+
+## [1.0.81] - 2026-06-24
+
+### Modifié
+
+- **Calendrier - vue Actif (lisibilité)** : regroupement par créneaux **15 min** (au lieu de 5), fusion des rafales du même site si écart ≤ 20 min, tri par temps actif décroissant, max **2** cartes visibles + « +N ». Plusieurs sites au même créneau → **pile verticale** pleine largeur (fini les fines bandes illisibles). Cartes compactes : nom du site + durée active en évidence, plage horaire en sous-texte.
+
 ## [1.0.78] - 2026-06-03
 
 ### Corrigé

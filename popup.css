@@ -6,6 +6,17 @@ body {
   color: #e8eaed;
   padding: 12px;
 }
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.app-logo {
+  flex-shrink: 0;
+  border-radius: 22%;
+  display: block;
+}
+.app-header-text { min-width: 0; }
 header h1 { font-size: 1rem; font-weight: 600; }
 .subtitle { font-size: 0.75rem; color: #9aa0a6; margin-top: 2px; }
 section { margin-top: 12px; }
