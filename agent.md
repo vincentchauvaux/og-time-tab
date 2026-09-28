@@ -23,7 +23,9 @@ Suivi du temps par onglet : **temps ouvert** (onglet existant) et **temps actif*
 | `lib/chart-colors.js` | Couleur stable par `groupKey` + dédup stricte par vue (`assignColorsForItems`, palette 24 + repli HSL, v1.0.43) |
 | `lib/chart.umd.min.js` | Chart.js (bundle local, CSP extension) |
 | `icons/` | Logo horloge PNG (16 / 32 / 48 / 128) — barre d’outils Chrome + UI |
-| `popup.html/js/css` | Résumé onglets + liens ; compteur groupes/onglets + schéma "sessions du jour" Chart.js (v1.0.60) |
+| `popup.html/js/css` | Résumé onglets + liens ; ordre Sessions → boutons → actif → suivis (replié) ; icône To-do (v1.0.93) |
+| `todo-overlay.js` | Panneau To-do (Shadow DOM) ; play/pause/stop ; **une seule fenêtre Chrome** hôte (v1.1.1) |
+| `lib/todos.js` | Persistance tâches / UI / clés `todo:` + timerStatus |
 | `options.html/js/css` | Réglages comportement humain |
 | `dashboard.html/js/css` | Calendrier semaine, modal détail, graphiques |
 
@@ -45,10 +47,11 @@ Seuils : secondes (&lt; 1 min), minutes (&lt; 1 h), heures (&lt; 24 h), jours (&
 - Grille semaine (lun - dim), créneaux 30 min, hauteur de base **32 px** par slot (× zoom vertical), plage **00:00 - 24:00** (locale), scroll vertical unique (axe + colonnes).
 - **Zoom vertical** (v1.0.32, plage étendue v1.0.33, scroll now v1.0.36, défaut présent v1.0.87) : slider dans `.calendar-toolbar` (à côté **Ouvert** / **Actif**) ; label « Zoom vertical » + valeur (ex. `400 %` sur semaine courante) ; plage **50 %–400 %** (`0,5×`–`4×`, pas `0,05`) ; persistance `sessionStorage` `ogTimeTabCalendarZoomY` (écrite au premier réglage du slider). **Sans clé session** : défaut **400 %** si `weekStart` = semaine courante, **100 %** sinon ; `syncCalendarZoomForDisplayedWeek` à chaque changement de semaine ; préférence enregistrée inchangée sur toutes les semaines. Recalcul `slotHPx`, axe, colonnes et blocs (`applyCalendarZoomY`). Ajustement slider ou retour semaine courante sans préférence : `scrollToNow` → `scrollCalendarToNow` (ligne now ~28 % viewport) ; semaine sans jour courant → ratio de scroll préservé.
 - Scroll auto vers l'heure courante à l'affichage de la semaine en cours (une fois par semaine affichée, `autoScrollToNowIfNeeded` — pas à chaque tick 2 s).
-- **Métrique calendrier** (v1.0.50, plage active v1.0.51, remplace Précis/Empilé v1.0.47) : toggle **Ouvert** | **Actif** dans `.calendar-toolbar` ; persistance `sessionStorage` `ogTimeTabCalendarMetric` (`open` | `active`, défaut `open` ; migration `ogTimeTabCalendarViewMode` : `stack` → `open`, `unstack` → `active`).
+- **Métrique calendrier** (v1.0.50, plage active v1.0.51, remplace Précis/Empilé v1.0.47, **Tâches** v1.0.102) : toggle **Ouvert** | **Actif** | **Tâches** dans `.calendar-toolbar` ; persistance `sessionStorage` `ogTimeTabCalendarMetric` (`open` | `active` | `tasks`, défaut `open` ; migration `ogTimeTabCalendarViewMode` : `stack` → `open`, `unstack` → `active`).
   - **Ouvert (`open`)** (présentation fusionnée v1.0.84) : clustering temporel (chevauchement, écart ≤ 5 min, plage min 15 min ; fusion forcée si > 10 clusters / créneau 15 min), puis **1 carte par site** (`groupKey`) ; plages qui se **chevauchent** → **bloc fusionné** multi-lignes (site ; au survol `A · O` + plage) ; sinon carte isolée (au repos nom seul, survol plage + A·O) ; titre `formatGroupLabel` (sans `www.`) ; **clic** → modal.
-  - **Actif (`active`)** (présentation côte à côte v1.0.84, spark v1.0.90, compact v1.0.91) : **uniquement** sessions avec `activeSeconds ≥ 30 s` ; plage visuelle = **durée active** (min→max des rafales, peut inclure des trous) ; regroupement **15 min** + fusion rafales même site (≤ 20 min, segments conservés) ; plusieurs sites → **lanes horizontales** (max **2** + « +N ») ; carte au repos = **titre seul** (plancher ~22 px) ; survol = durée + plage (agrandissement) ; **mini-graphique O/A vertical** (10 % largeur, discret) ; clic → modal site.
-- **Hauteur / fin visuelle** (v1.0.75, fusion Ouvert v1.0.84, Actif compact v1.0.91) : plancher **15 min** (Ouvert isolé) / **~22 px titre** (Actif isolé) ; bloc fusionné Ouvert = hauteur min selon nombre de lignes (**22 px**/ligne) ; **bas de carte = heure de fin réelle** ; zone hachurée en tête si plancher actif + libellé fin `HH:MM` en bas (masqué en Actif).
+  - **Actif (`active`)** (présentation côte à côte v1.0.84, spark v1.0.90, compact v1.0.91, hover v1.0.96–1.0.99) : **uniquement** sessions avec `activeSeconds ≥ 30 s` ; plage visuelle = **durée active** (min→max des rafales, peut inclure des trous) ; regroupement **15 min** + fusion rafales même site (≤ 20 min, segments conservés) ; plusieurs sites → **lanes horizontales** (max **2** + « +N ») ; carte au repos = **titre seul** (plancher **28 px**) ; survol = durée + plage + **premier plan** (reste devant jusqu’au prochain survol) ; **mini-graphique O/A vertical** (10 % largeur, discret) ; clic → modal site.
+  - **Tâches (`tasks`)** (v1.0.102, présentation Actif v1.1.2, coupe pause v1.1.3) : sessions liées au panneau To-do (`groupKey` `todo:…`) ; **play** = segment O+A ; **pause** = **clôture le segment** (bloc coupé, plus de live) ; **play** suivant = nouveau bloc ; **stop** = flush + idle ; layout type Actif ; stats hors graphiques, dans Résumé CSV.
+- **Hauteur / fin visuelle** (v1.0.75, fusion Ouvert v1.0.84, Actif compact v1.0.91/1.0.99) : plancher **15 min** (Ouvert isolé) / **28 px titre** (Actif isolé) ; bloc fusionné Ouvert = hauteur min selon nombre de lignes (**22 px**/ligne) ; **bas de carte = heure de fin réelle** ; zone hachurée en tête si plancher actif + libellé fin `HH:MM` en bas (masqué en Actif).
 - **Un onglet** : fond sombre neutre semi-transparent ; **bordure 2px** rouge → vert selon `ratio = clamp(activeSeconds / max(openSeconds, 1), 0..1)` (CSS `--activity-ratio`, `color-mix`) ; plage horaire affichée = plage **Ouvert** (ouverture) ou plage **active** (Actif), même si la hauteur visuelle est tendue au plancher 3 min.
 - **Plusieurs onglets** (mode empilé) : **une carte par site** au même créneau (pas N cartes pour N onglets du même `groupKey`) ; plusieurs sites distincts → rangée horizontale (max 4 + « +N », v1.0.49) ; **clic** carte = modal détail site (`openStackSiteCardModal`, v1.0.45).
 - Survol : carte **agrandie** (révélation plage / durées, v1.0.83) + infobulle (`title`) avec durées détaillées (`format-duration.js`).
@@ -103,7 +106,7 @@ Seuils : secondes (&lt; 1 min), minutes (&lt; 1 h), heures (&lt; 24 h), jours (&
 **Grille stats (v1.0.64, bento/masonry)** : mobile **1 colonne**, tablette **2 colonnes**, desktop large **masonry 12 colonnes** avec cartes de tailles variées pour mieux hiérarchiser les contenus.
 
 - **Temps réel par jour** (barres, 14 derniers jours, colonne 1) : **deux séries** fixes Ouvert + Actif ; agrégation par **union temporelle journalière** (non-cumulative entre onglets parallèles). **Clic sur une barre** sélectionne ce jour pour la carte "Répartition par jour" (indication dans le sous-titre du titre).
-- **Répartition par jour** (doughnut, colonne 2) : toggle **Actif** | **Ouvert** (`sessionStorage` `ogTimeTabStatsMetric`, défaut : actif). Bouton **Résumé** → CSV du jour (`og-time-tab-resume-YYYY-MM-DD.csv`, v1.0.92). `aggregateDayByGroup` sur **un seul** jour (`statsSelectedDay`). Camembert `#chart-groups-day`, liste `#doughnut-legend-day`. Navigation jour : **‹** / **›** + date picker ; persistance `ogTimeTabStatsDay`. **Clic ligne site** → modal `openGroupModalForDay` (v1.0.25) ; icne **** ouvre le site.
+- **Répartition par jour** (doughnut, colonne 2) : toggle **Actif** | **Ouvert** (`sessionStorage` `ogTimeTabStatsMetric`, défaut : actif). Bouton **Résumé** → CSV du jour (`og-time-tab-resume-YYYY-MM-DD.csv`, v1.0.92) incluant **onglets et tâches** To-do + colonne `type` (v1.0.103). `aggregateDayByGroup` sur **un seul** jour (`statsSelectedDay`). Camembert `#chart-groups-day`, liste `#doughnut-legend-day`. Navigation jour : **‹** / **›** + date picker ; persistance `ogTimeTabStatsDay`. **Clic ligne site** → modal `openGroupModalForDay` (v1.0.25) ; icne **** ouvre le site.
 - **Insights semaine** (colonne 3, v1.0.19) : analyse de la **semaine affichée** - tuiles O/A, top sites, focus %, etc. ; clic → modal sessions (URL / groupe cliquables depuis v1.0.24).
 - **Insights** (colonne 3, v1.0.29, correctif affichage v1.0.39) : toggle **Semaine | Jour** (`#week-insights` / `#day-insights`, un seul visible). Mode **Semaine** : agrégation 7 jours `weekStart` (`aggregateWeekInsights`) — plage lun–dim, tuile « Jour le plus actif ». Mode **Jour** : uniquement `statsSelectedDay` (`aggregateDayInsights`, `dayKeys: [statsSelectedDay]`) — date unique (ex. « mar. 26 mai 2026 »), total O/A du jour, site top actif/ouvert, focus %, ratio, top 3 actifs, onglet le plus actif, plage horaire ; clic tuile/top → `openGroupModalForDay`. Synchronisé avec clic barre 14 j et sélecteur « Répartition par jour ».
 - **Chronologie activité** (v1.0.74, bento) : courbe Chart.js **Ouvert/Actif** en profils **bucket 1 h** (sans sélecteur) ; portée alignée sur le toggle insights.  
@@ -704,6 +707,21 @@ Le changement de focus enregistre une activité lgre **uniquement** sur l'onglet
 
 | Version | Date | Notes |
 |---------|------|-------|
+| **1.1.3** | 2026-09-28 | Pause To-do coupe le bloc calendrier (segments play séparés) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.1.2** | 2026-09-28 | Calendrier Tâches : présentation type Actif (côte à côte) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.1.1** | 2026-09-25 | To-do limité à la fenêtre hôte (pas toutes les fenêtres) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.1.0** | 2026-09-25 | To-do ↔ calendrier (Tâches, play/pause/stop, résumé CSV) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.103** | 2026-09-25 | Résumé CSV : inclut les tâches To-do + colonne type - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.102** | 2026-09-25 | Calendrier : mode Tâches lié au To-do (play/pause/stop) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.101** | 2026-09-25 | Fix erreur SW « No SW » (injection To-do + promesses) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.100** | 2026-09-25 | Modal au-dessus des cartes Actif (z-index) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.99** | 2026-09-25 | Calendrier Actif : hover au 1er plan + plancher 28 px anti-coupe texte - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.98** | 2026-09-25 | Calendrier Actif : hover agrandit assez pour 3 lignes sans couper le texte - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.97** | 2026-09-25 | To-do : toggle icône + sync sur tous les onglets - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.96** | 2026-09-25 | Calendrier Actif : hover n’agrandit que (plus de repli hauteur) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.95** | 2026-09-25 | To-do : fix réouverture après fermeture fenêtre / sync injection - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.94** | 2026-09-25 | To-do en overlay page (sans cadre OS), persiste entre onglets - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.0.93** | 2026-09-25 | Popup réordonné + To-do flottante (persistante, DnD, collapse) - voir [CHANGELOG.md](./CHANGELOG.md) |
 | **1.0.92** | 2026-09-22 | Stats jour : bouton Résumé → export CSV des sessions du jour - voir [CHANGELOG.md](./CHANGELOG.md) |
 | **1.0.91** | 2026-08-21 | Calendrier Actif : plancher titre seul, détail au survol - voir [CHANGELOG.md](./CHANGELOG.md) |
 | **1.0.90** | 2026-08-21 | Calendrier Actif : mini-graphique O/A vertical (style modal) dans les cartes - voir [CHANGELOG.md](./CHANGELOG.md) |
@@ -801,10 +819,10 @@ Le changement de focus enregistre une activité lgre **uniquement** sur l'onglet
 
 ## 0tat du projet
 
-- Extension MV3 fonctionnelle (v1.0.92)
+- Extension MV3 fonctionnelle (v1.1.3)
 - Popup, options, dashboard calendrier + stats Chart.js
 - Modal détail bloc calendrier (URL / groupe en liens sécurisés) ; panneau liste multi-onglets (créneaux chevauchants, lignes par `groupKey`)
-- Popup : onglets suivis regroupés par site/groupe (totaux O/A), compteur groupes/onglets dans l"en-tête de liste, et schéma temporel "sessions du jour" (Chart.js)
+- Popup : onglets suivis regroupés par site/groupe (totaux O/A), compteur groupes/onglets dans l"en-tête de liste, et schéma temporel "sessions du jour" (Chart.js) ; To-do overlay page (v1.0.94)
 - Focus fenêtre + onglet actif pour **A**
 - Regroupement URL configurable
 
@@ -812,7 +830,7 @@ Le changement de focus enregistre une activité lgre **uniquement** sur l'onglet
 
 - Service worker peut tre suspendu par Chrome ; le tick reprend via alarmes et messages d"activité.
 - Aprs **Recharger** l'extension, les onglets déjà ouverts gardent l"ancien content script jusqu" **F5** ou rinjection (`executeScript` au chargement d"onglet). v1.0.18 : plus d"erreurs `Uncaught` / `Extension context invalidated` (couteurs dtachs, `contextDead`) ; le tracking humain ne reprend qu"après refresh de la page ou nouvelle navigation.
-- Pages `chrome://` et `chrome-extension://` non suivies.
+- Pages `chrome://` et `chrome-extension://` non suivies ; l’overlay To-do n’y apparaît pas non plus (limitation Chrome).
 - Pas d"icnes PNG dans le manifest (avertissement possible  l"installation).
 - Chevauchement calendrier : **Ouvert** = 1 carte par `groupKey` par créneau 15 min (tous onglets ouverts, min 15 min) ; **Actif** = plage visuelle temps actif uniquement (≥ 30 s, ancrage activité, min hauteur 5 min, binning layout 5 min, layout horizontal max 4 + « +N ») (v1.0.60).
 - Graphiques stats : carte **semaine** = Actif + Ouvert simultans (pas de toggle) ; carte **jour** = toggle Actif/Ouvert ; semaine affichée = carte pleine largeur + **insights** ; jour sélectionn indpendant (sauf **Aujourd'hui**) ; 14 j en double srie fixe (v1.0.12).

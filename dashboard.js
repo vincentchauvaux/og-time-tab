@@ -5,6 +5,7 @@ import {
   normalizeGroupKeyForStats,
   normalizeStatsGroupKey
 } from "./lib/grouping.js";
+import { isTodoGroupKey, isTodoUrl } from "./lib/todos.js";
 import { loadConfig } from "./lib/config.js";
 import {
   formatDurationShort,
@@ -31,8 +32,8 @@ const MIN_BLOCK_MINUTES = 15;
 const ACTIVE_MIN_VISUAL_MINUTES = 2;
 /** Seuil minimal de temps actif pour afficher une carte en mode Actif. */
 const ACTIVE_MIN_DISPLAY_SECONDS = 30;
-/** Hauteur minimale d'une carte Actif isolée (px) : titre seul. */
-const ACTIVE_SINGLE_READABLE_MIN_PX = 22;
+/** Hauteur minimale d'une carte Actif isolée (px) : titre seul (évite coupe du texte). */
+const ACTIVE_SINGLE_READABLE_MIN_PX = 28;
 /** Hauteur minimale d'une ligne dans un bloc Actif fusionné (px). */
 const ACTIVE_FUSED_LINE_MIN_PX = 22;
 /** Padding interne bloc Actif fusionné (px). */
@@ -155,6 +156,9 @@ function normalizeStatsLabelKey(groupKey) {
 function resolveStatsGroupKey(record, config) {
   const url = cleanStatsToken(record?.url || "");
   const legacy = cleanStatsToken(record?.groupKey || "");
+  if (isTodoUrl(url) || isTodoGroupKey(legacy)) {
+    return isTodoGroupKey(legacy) ? legacy : url.replace(/^todo:\/\//, "todo:");
+  }
   let raw;
   if (isTrackableStatsUrl(url)) {
     raw = getGroupKey(url, config);
@@ -181,7 +185,23 @@ function normalizeLiveForStats(live, config) {
     ...t,
     groupKey: resolveStatsGroupKey(t, config)
   }));
-  return { ...(live || {}), tabs };
+  return { ...(live || {}), tabs, tasks: live?.tasks || [] };
+}
+
+function isTaskRecord(record) {
+  return Boolean(record?.isTask || isTodoGroupKey(record?.groupKey) || isTodoUrl(record?.url));
+}
+
+function statsEntriesOnly(entries) {
+  return (entries || []).filter((e) => !isTaskRecord(e));
+}
+
+function statsLiveOnly(live) {
+  return {
+    ...(live || {}),
+    tabs: (live?.tabs || []).filter((t) => !isTaskRecord(t)),
+    tasks: []
+  };
 }
 
 /** @type {"active"|"open"} */
@@ -282,7 +302,7 @@ applyCalendarMetricUi();
 document.querySelectorAll(".calendar-metric-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     const metric = btn.getAttribute("data-calendar-metric");
-    if (metric === "open" || metric === "active") setCalendarMetric(metric);
+    if (metric === "open" || metric === "active" || metric === "tasks") setCalendarMetric(metric);
   });
 });
 applyCalendarZoomY(calendarZoomY, {
@@ -608,7 +628,7 @@ function syncCalendarZoomForDisplayedWeek() {
 function loadCalendarMetric() {
   try {
     const v = sessionStorage.getItem(CALENDAR_METRIC_STORAGE);
-    if (v === "open" || v === "active") return v;
+    if (v === "open" || v === "active" || v === "tasks") return v;
     const legacy = sessionStorage.getItem(CALENDAR_VIEW_MODE_STORAGE);
     if (legacy === "stack") return "open";
     if (legacy === "unstack") return "active";
@@ -629,12 +649,13 @@ function applyCalendarMetricUi() {
   if (wrap) {
     wrap.classList.toggle("mode-active", calendarMetric === "active");
     wrap.classList.toggle("mode-open", calendarMetric === "open");
+    wrap.classList.toggle("mode-tasks", calendarMetric === "tasks");
   }
 }
 
-/** @param {"open"|"active"} metric */
+/** @param {"open"|"active"|"tasks"} metric */
 function setCalendarMetric(metric) {
-  if (metric !== "open" && metric !== "active") return;
+  if (metric !== "open" && metric !== "active" && metric !== "tasks") return;
   if (metric === calendarMetric) return;
   calendarMetric = metric;
   try {
@@ -745,10 +766,10 @@ function formatCsvDateTime(ts) {
 }
 
 /**
- * Toutes les sessions du jour sélectionné (historique + live) pour export CSV.
+ * Toutes les sessions du jour sélectionné (historique + live onglets + live tâches) pour export CSV.
  * @param {string} dayKey
  * @param {object[]} entries
- * @param {{ tabs?: object[] }} live
+ * @param {{ tabs?: object[], tasks?: object[] }} live
  */
 function collectDaySummaryRows(dayKey, entries, live) {
   const rows = [];
@@ -756,8 +777,10 @@ function collectDaySummaryRows(dayKey, entries, live) {
   for (const e of entries || []) {
     if (e.date !== dayKey) continue;
     const secs = coerceOpenActiveSeconds(e.openSeconds, e.activeSeconds);
+    const isTask = isTaskRecord(e);
     rows.push({
       date: dayKey,
+      type: isTask ? "tache" : "onglet",
       titre: e.title || "",
       url: e.url || "",
       groupe: e.groupKey || "",
@@ -771,11 +794,13 @@ function collectDaySummaryRows(dayKey, entries, live) {
     });
   }
   for (const t of live?.tabs || []) {
+    if (isTaskRecord(t)) continue;
     const tabDay = dateKeyFromTs(t.segmentStart || t.openedAt);
     if (tabDay !== dayKey) continue;
     const secs = coerceOpenActiveSeconds(t.openSeconds, t.activeSeconds);
     rows.push({
       date: dayKey,
+      type: "onglet",
       titre: t.title || "",
       url: t.url || "",
       groupe: t.groupKey || "",
@@ -788,6 +813,27 @@ function collectDaySummaryRows(dayKey, entries, live) {
       source: "live"
     });
   }
+  for (const t of live?.tasks || []) {
+    if (!t?.todoId) continue;
+    const start = t.segmentStart || t.openedAt;
+    const taskDay = dateKeyFromTs(start);
+    if (taskDay !== dayKey) continue;
+    const secs = coerceOpenActiveSeconds(t.openSeconds, t.activeSeconds);
+    rows.push({
+      date: dayKey,
+      type: "tache",
+      titre: t.text || "Tâche",
+      url: `todo://${t.todoId}`,
+      groupe: `todo:${t.todoId}`,
+      debut: formatCsvDateTime(start),
+      fin: formatCsvDateTime(nowTs),
+      ouvert_secondes: secs.openSeconds,
+      actif_secondes: secs.activeSeconds,
+      ouvert: formatDurationShort(secs.openSeconds),
+      actif: formatDurationShort(secs.activeSeconds),
+      source: t.status === "paused" ? "live-pause" : "live"
+    });
+  }
   rows.sort((a, b) => String(a.debut).localeCompare(String(b.debut)));
   return rows;
 }
@@ -795,6 +841,7 @@ function collectDaySummaryRows(dayKey, entries, live) {
 function buildDaySummaryCsv(rows) {
   const headers = [
     "date",
+    "type",
     "titre",
     "url",
     "groupe",
@@ -1127,7 +1174,45 @@ function collectBlocks(entries, live) {
     });
   }
 
+  for (const t of live.tasks || []) {
+    if (!t?.todoId) continue;
+    // En pause : pas de bloc live (le segment play a déjà été coupé en historique)
+    if (t.status === "paused") continue;
+    const start = t.segmentStart || t.openedAt || Date.now();
+    const nowTs = Date.now();
+    if (start > nowTs) continue;
+    const secs = coerceOpenActiveSeconds(t.openSeconds, t.activeSeconds);
+    if (secs.openSeconds <= 0 && secs.activeSeconds <= 0) continue;
+    const approxEndTs = Math.max(
+      toTimestamp(start) + 1000,
+      Math.min(nowTs, toTimestamp(start) + Math.max(1, secs.openSeconds) * 1000)
+    );
+    if (approxEndTs <= toTimestamp(start)) continue;
+    blocks.push({
+      title: t.text || "Tâche",
+      url: `todo://${t.todoId}`,
+      groupKey: `todo:${t.todoId}`,
+      start,
+      end: approxEndTs,
+      activeSeconds: secs.activeSeconds,
+      openSeconds: secs.openSeconds,
+      lastActivityAt: t.status === "playing" ? nowTs : null,
+      date: dateKeyFromTs(start),
+      isLive: true,
+      isTask: true,
+      taskStatus: t.status || "playing",
+      entryId: null
+    });
+  }
+
   return blocks;
+}
+
+function filterBlocksForCalendarMetric(blocks) {
+  if (calendarMetric === "tasks") {
+    return (blocks || []).filter((b) => isTodoGroupKey(b.groupKey) || b.isTask);
+  }
+  return (blocks || []).filter((b) => !isTodoGroupKey(b.groupKey) && !b.isTask);
 }
 
 function dateKeyFromTs(ts) {
@@ -1403,7 +1488,7 @@ function sparkSeriesToAreaPath(values) {
  */
 function syncActiveStripes(el, item) {
   let layer = el.querySelector(".block-active-spark");
-  if (calendarMetric !== "active" || item.type === "stack-overflow") {
+  if ((calendarMetric !== "active" && calendarMetric !== "tasks") || item.type === "stack-overflow") {
     if (layer) layer.remove();
     el.querySelector(".block-active-stripes")?.remove();
     return;
@@ -1437,7 +1522,9 @@ function syncActiveStripes(el, item) {
 }
 
 function siteVisibleMaxForMetric() {
-  return calendarMetric === "active" ? ACTIVE_SITE_VISIBLE_MAX : STACK_SITE_VISIBLE_MAX;
+  return calendarMetric === "active" || calendarMetric === "tasks"
+    ? ACTIVE_SITE_VISIBLE_MAX
+    : STACK_SITE_VISIBLE_MAX;
 }
 
 function blocksStackClusterable(a, b) {
@@ -1530,6 +1617,11 @@ function dedupeBlockMembers(members) {
 }
 
 function stackSiteCardTitle(item) {
+  if (isTodoGroupKey(item.groupKey)) {
+    const title = item.members?.[0]?.title || "Tâche";
+    if ((item.count || item.members?.length || 1) <= 1) return title;
+    return `${title} · ${item.count} sessions`;
+  }
   if (item.groupKey) {
     const label = formatGroupLabel(item.groupKey);
     if (item.count <= 1) return label;
@@ -1709,7 +1801,9 @@ function clearLaneProps(it) {
 }
 
 function stackLayoutBinMinutes() {
-  return calendarMetric === "active" ? ACTIVE_STACK_BIN_MINUTES : MIN_BLOCK_MINUTES;
+  return calendarMetric === "active" || calendarMetric === "tasks"
+    ? ACTIVE_STACK_BIN_MINUTES
+    : MIN_BLOCK_MINUTES;
 }
 
 /** @param {object[]} group @param {string} stackSlotKey @param {number} slotStartMin @param {number} slotEndMin */
@@ -1809,7 +1903,8 @@ function assignStackSiteLayout(items) {
 
 function buildDisplayItems(blocks) {
   const nowTs = Date.now();
-  const indexed = blocks.map((b, i) => ({ ...b, blockIndex: i }));
+  const filtered = filterBlocksForCalendarMetric(blocks);
+  const indexed = filtered.map((b, i) => ({ ...b, blockIndex: i }));
   const byDay = new Map();
   for (const b of indexed) {
     const dayIdx = dayIndexForBlock(b);
@@ -1820,23 +1915,22 @@ function buildDisplayItems(blocks) {
     byDay.get(dayIdx).push(block);
   }
 
+  const stackLike = calendarMetric === "active" || calendarMetric === "tasks";
   const items = [];
   for (const [dayIdx, dayBlocks] of byDay) {
     if (dayBlocks.length === 0) continue;
     let blocksForDay = dayBlocks;
-    if (calendarMetric === "active") {
+    if (stackLike) {
       blocksForDay = mergeSameSiteActiveBlocks(dayBlocks);
     }
     const clusters = clusterDayBlocks(blocksForDay);
+    // Actif : filtre ≥ 30 s actifs ; Tâches : toutes les sessions (plage ouverte), même layout côte à côte.
     const dayItems =
       calendarMetric === "active"
         ? buildActiveDisplayItems(dayIdx, clusters)
         : buildOpenDisplayItems(dayIdx, clusters);
-    /* Présentation inversée (v1.0.84) : Actif = côte à côte (ex-Ouvert) ; Ouvert = fusion (ex-Actif). */
     items.push(
-      ...(calendarMetric === "active"
-        ? assignStackSiteLayout(dayItems)
-        : fuseOverlappingActiveItems(dayItems))
+      ...(stackLike ? assignStackSiteLayout(dayItems) : fuseOverlappingActiveItems(dayItems))
     );
   }
   return items;
@@ -1971,18 +2065,49 @@ function blockLayout(item, cols, gridRect, options = {}) {
 
 const BLOCK_Z_BASE = 10;
 const BLOCK_Z_MAX = 80;
-const BLOCK_Z_HOVER_OFFSET = 100;
-const BLOCK_Z_HOVER_MAX = 89;
+/** Z au-dessus de toutes les cartes (hover / dernier au premier plan). */
+const BLOCK_Z_FRONT = 1000;
+const BLOCK_Z_FRONT_ROW = 999;
+
+/** @type {HTMLElement|null} */
+let lastFrontBlockEl = null;
+/** @type {HTMLElement|null} */
+let lastFrontRowEl = null;
 
 function blockBaseZ(orderIndex) {
   const raw = BLOCK_Z_BASE + (orderIndex || 0);
   return raw > BLOCK_Z_MAX ? BLOCK_Z_MAX : raw;
 }
 
+/** Amène la carte (et sa rangée parent) au premier plan ; y reste jusqu’à un autre survol. */
+function bringBlockToFront(el) {
+  if (!(el instanceof HTMLElement)) return;
+  const base = Number(el.dataset.baseZ || el.style.zIndex || BLOCK_Z_BASE);
+  const baseZ = Number.isFinite(base) && base > 0 ? base : BLOCK_Z_BASE;
+  el.dataset.baseZ = String(baseZ);
+
+  if (lastFrontBlockEl && lastFrontBlockEl !== el) {
+    const prevBase = lastFrontBlockEl.dataset.baseZ;
+    if (prevBase) lastFrontBlockEl.style.zIndex = prevBase;
+  }
+  if (lastFrontRowEl && lastFrontRowEl !== el.closest(".stack-slot-row")) {
+    lastFrontRowEl.style.zIndex = "";
+  }
+
+  el.style.zIndex = String(BLOCK_Z_FRONT);
+  const row = el.closest(".stack-slot-row");
+  if (row instanceof HTMLElement) {
+    row.style.zIndex = String(BLOCK_Z_FRONT_ROW);
+    lastFrontRowEl = row;
+  } else {
+    lastFrontRowEl = null;
+  }
+  lastFrontBlockEl = el;
+}
+
 function blockHoverZ(baseZ) {
-  const raw = baseZ + BLOCK_Z_HOVER_OFFSET;
-  const clamped = raw > BLOCK_Z_HOVER_MAX ? BLOCK_Z_HOVER_MAX : raw;
-  return clamped;
+  // rétrocompat appels éventuels : toujours au-dessus du max de base
+  return BLOCK_Z_FRONT;
 }
 
 /** Position de la rangée flex pour plusieurs sites au même créneau (mode empilé). */
@@ -1995,7 +2120,10 @@ function stackSlotRowLayout(item, cols, gridRect) {
   const endMin = item.stackSlotEndMin ?? item.visualEndMin ?? localMinutesFromTs(item.end);
   const useMinH = calendarMetric === "open";
   const vertical = layoutBlockVerticalRange(startMin, endMin, useMinH);
-  if (calendarMetric === "active" && (item.laneCount ?? 0) > 1) {
+  if (
+    (calendarMetric === "active" || calendarMetric === "tasks") &&
+    (item.laneCount ?? 0) > 1
+  ) {
     const cardCount = item.laneCount ?? 1;
     const stackMinH =
       cardCount * STACK_SLOT_CARD_MIN_PX + Math.max(0, cardCount - 1) * STACK_SITE_SLOT_GAP_PX;
@@ -2087,21 +2215,26 @@ function applyBlockLayout(el, layout) {
   el.style.width = `${layout.width}px`;
   el.style.top = `${layout.top}px`;
   el.style.height = `${layout.height}px`;
+  el.style.setProperty("--block-calendar-h", `${layout.height}px`);
   const frac = layout.realHeightFrac ?? 1;
   el.style.setProperty("--block-real-frac", String(frac));
   el.classList.toggle("block-readability-pad", frac < 0.999);
-  el.classList.toggle("block--short", calendarMetric === "active" && layout.height < 40);
+  el.classList.toggle("block--short", (calendarMetric === "active" || calendarMetric === "tasks") && layout.height < 40);
   const endTimeEl = el.querySelector(".block-end-time");
   if (endTimeEl && layout.visualEndMin != null) {
     endTimeEl.textContent = formatClockFromMinutes(layout.visualEndMin);
-    endTimeEl.hidden = calendarMetric === "active" || layout.height < 40;
+    endTimeEl.hidden =
+      calendarMetric === "active" || calendarMetric === "tasks" || layout.height < 40;
   }
 }
 
 function updateConsolidatedBlockContent(el, item) {
   el.className = "block consolidated";
-  if (calendarMetric === "active") el.classList.add("block-active-compact");
+  const compactLike = calendarMetric === "active" || calendarMetric === "tasks";
+  if (compactLike) el.classList.add("block-active-compact");
   else el.classList.remove("block-active-compact");
+  if (calendarMetric === "tasks") el.classList.add("block-task");
+  else el.classList.remove("block-task");
   delete el.dataset.blockIndex;
   el.dataset.domKey = item.domKey;
   const label = stackSiteCardTitle(item);
@@ -2116,10 +2249,11 @@ function updateConsolidatedBlockContent(el, item) {
   const rangeStart = item.displayStart ?? item.start;
   const rangeEnd = item.displayEnd ?? item.end;
   const timeRange = formatTimeRange(rangeStart, rangeEnd, { clampToNow: hasLive });
-  if (calendarMetric === "active") {
-    const siteLabel = item.groupKey ? formatGroupLabel(item.groupKey) : label;
-    if (titleEl) titleEl.textContent = siteLabel;
-    if (urlEl) urlEl.textContent = formatDurationShort(totalA);
+  if (compactLike) {
+    if (titleEl) titleEl.textContent = calendarMetric === "tasks" ? label : (item.groupKey ? formatGroupLabel(item.groupKey) : label);
+    if (urlEl) {
+      urlEl.textContent = formatDurationShort(calendarMetric === "tasks" ? totalO : totalA);
+    }
     if (metaEl) metaEl.textContent = timeRange;
   } else {
     const siteLabel = item.groupKey ? formatGroupLabel(item.groupKey) : label;
@@ -2130,7 +2264,7 @@ function updateConsolidatedBlockContent(el, item) {
     }
   }
   const siteHint = item.groupKey ? `\nSite: ${item.groupKey}` : "";
-  el.title = `${label}${siteHint}\n${timeRange}\nActif: ${formatDurationFull(totalA)} · Ouvert: ${formatDurationFull(totalO)}\nClic : détail site (modal)`;
+  el.title = `${label}${siteHint}\n${timeRange}\nActif: ${formatDurationFull(totalA)} · Ouvert: ${formatDurationFull(totalO)}\nClic : détail (modal)`;
   syncActiveStripes(el, item);
 }
 
@@ -2184,7 +2318,11 @@ function updateActiveFusedBlockContent(el, item) {
     const rangeStart = lineItem.displayStart ?? lineItem.start;
     const rangeEnd = lineItem.displayEnd ?? lineItem.end;
     const timeRange = formatTimeRange(rangeStart, rangeEnd, { clampToNow: hasLive });
-    const siteLabel = lineItem.groupKey ? formatGroupLabel(lineItem.groupKey) : stackSiteCardTitle(lineItem);
+    const siteLabel = isTodoGroupKey(lineItem.groupKey)
+      ? (lineItem.members?.[0]?.title || stackSiteCardTitle(lineItem))
+      : lineItem.groupKey
+        ? formatGroupLabel(lineItem.groupKey)
+        : stackSiteCardTitle(lineItem);
     if (siteEl) siteEl.textContent = siteLabel;
     if (durEl) {
       durEl.textContent =
@@ -2316,16 +2454,11 @@ function createBlockShell(item) {
   }
 
   el.addEventListener("mouseenter", () => {
-    const base = Number(el.dataset.baseZ || el.style.zIndex || BLOCK_Z_BASE);
-    const baseZ = Number.isFinite(base) && base > 0 ? base : BLOCK_Z_BASE;
-    el.dataset.baseZ = String(baseZ);
-    el.style.zIndex = String(blockHoverZ(baseZ));
+    bringBlockToFront(el);
   });
 
-  el.addEventListener("mouseleave", () => {
-    if (el.dataset.baseZ) {
-      el.style.zIndex = el.dataset.baseZ;
-    }
+  el.addEventListener("focusin", () => {
+    bringBlockToFront(el);
   });
 
   return el;
@@ -3064,12 +3197,16 @@ function applyStackSlotCardLayout(el, rowLayout) {
   el.style.left = "";
   el.style.top = "";
   el.style.width = "";
-  if (calendarMetric === "active") {
+  if (calendarMetric === "active" || calendarMetric === "tasks") {
     el.style.height = "";
     el.style.flex = "0 0 auto";
+    if (rowLayout?.height != null) {
+      el.style.setProperty("--block-calendar-h", `${rowLayout.height}px`);
+    }
   } else if (rowLayout) {
     el.style.height = `${rowLayout.height}px`;
     el.style.flex = "";
+    el.style.setProperty("--block-calendar-h", `${rowLayout.height}px`);
   }
 }
 
@@ -5585,8 +5722,10 @@ async function renderCharts() {
 
   const live = cachedLive;
   const config = statsGroupingConfig;
+  const entries = statsEntriesOnly(cachedEntries);
+  const liveStats = statsLiveOnly(live);
   if (!statsDayInitialized) {
-    statsSelectedDay = pickDefaultStatsDay(cachedEntries, live);
+    statsSelectedDay = pickDefaultStatsDay(entries, liveStats);
     try {
       sessionStorage.setItem(STATS_DAY_STORAGE, statsSelectedDay);
     } catch {
@@ -5596,12 +5735,12 @@ async function renderCharts() {
     updateStatsChartTitles();
   }
 
-  const daily = aggregateLast14Days(cachedEntries, live);
-  const groups = aggregateWeekByGroupDual(cachedEntries, live, config);
-  const dayGroups = aggregateDayByGroup(statsSelectedDay, cachedEntries, live, statsMetricMode, config);
-  const weekInsights = aggregateWeekInsights(cachedEntries, live);
-  const dayInsights = aggregateDayInsights(statsSelectedDay, cachedEntries, live);
-  const activityTimeline = buildStatsActivityTimeline(cachedEntries, live);
+  const daily = aggregateLast14Days(entries, liveStats);
+  const groups = aggregateWeekByGroupDual(entries, liveStats, config);
+  const dayGroups = aggregateDayByGroup(statsSelectedDay, entries, liveStats, statsMetricMode, config);
+  const weekInsights = aggregateWeekInsights(entries, liveStats);
+  const dayInsights = aggregateDayInsights(statsSelectedDay, entries, liveStats);
+  const activityTimeline = buildStatsActivityTimeline(entries, liveStats);
 
   updateStatsEmptyState(daily, groups, weekInsights);
 

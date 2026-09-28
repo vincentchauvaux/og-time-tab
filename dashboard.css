@@ -74,7 +74,7 @@ body {
 }
 
 #erase-modal {
-  z-index: 110;
+  z-index: 2100;
 }
 
 .erase-modal-content .erase-warning {
@@ -517,15 +517,17 @@ body {
   filter: brightness(1.12);
 }
 
-/* Mini-graphique O/A vertical (style modal, timeline haut → bas). */
-.calendar-wrap.mode-active .block.consolidated.block-active-compact {
-  padding: 5px 7px;
+/* Mini-graphique O/A vertical (style modal, timeline haut → bas). Actif + Tâches. */
+.calendar-wrap.mode-active .block.consolidated.block-active-compact,
+.calendar-wrap.mode-tasks .block.consolidated.block-active-compact {
+  padding: 4px 7px;
   font-size: 0.68rem;
-  line-height: 1.25;
+  line-height: 1.2;
   transition: padding 0.15s ease, min-height 0.15s ease;
   overflow: hidden;
 }
-.calendar-wrap.mode-active .block-active-spark {
+.calendar-wrap.mode-active .block-active-spark,
+.calendar-wrap.mode-tasks .block-active-spark {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -537,18 +539,21 @@ body {
   border-radius: inherit;
   opacity: 0.45;
 }
-.calendar-wrap.mode-active .block-active-spark-svg {
+.calendar-wrap.mode-active .block-active-spark-svg,
+.calendar-wrap.mode-tasks .block-active-spark-svg {
   display: block;
   width: 100%;
   height: 100%;
 }
-.calendar-wrap.mode-active .block-active-spark-open {
+.calendar-wrap.mode-active .block-active-spark-open,
+.calendar-wrap.mode-tasks .block-active-spark-open {
   fill: rgba(107, 114, 128, 0.18);
   stroke: rgba(107, 114, 128, 0.4);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
-.calendar-wrap.mode-active .block-active-spark-active {
+.calendar-wrap.mode-active .block-active-spark-active,
+.calendar-wrap.mode-tasks .block-active-spark-active {
   fill: rgba(40, 167, 69, 0.28);
   stroke: rgba(40, 167, 69, 0.55);
   stroke-width: 1.1;
@@ -556,48 +561,69 @@ body {
 }
 .calendar-wrap.mode-active .block-active-compact .block-title,
 .calendar-wrap.mode-active .block-active-compact .block-url,
-.calendar-wrap.mode-active .block-active-compact .block-meta {
+.calendar-wrap.mode-active .block-active-compact .block-meta,
+.calendar-wrap.mode-tasks .block-active-compact .block-title,
+.calendar-wrap.mode-tasks .block-active-compact .block-url,
+.calendar-wrap.mode-tasks .block-active-compact .block-meta {
   position: relative;
   z-index: 1;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
-.calendar-wrap.mode-active .block-active-compact .block-title {
+.calendar-wrap.mode-active .block-active-compact .block-title,
+.calendar-wrap.mode-tasks .block-active-compact .block-title {
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.calendar-wrap.mode-active .block-active-compact .block-url {
+.calendar-wrap.mode-active .block-active-compact .block-url,
+.calendar-wrap.mode-tasks .block-active-compact .block-url {
   color: var(--green);
   font-weight: 600;
   font-size: 0.66rem;
 }
-.calendar-wrap.mode-active .block-active-compact .block-meta {
+.calendar-wrap.mode-active .block-active-compact .block-meta,
+.calendar-wrap.mode-tasks .block-active-compact .block-meta {
   color: var(--muted);
   font-size: 0.62rem;
 }
-/* Repos : nom du site seul ; survol / focus : durée + plage (carte s'agrandit). */
+/* Repos : titre seul ; survol / focus : durée + plage. */
 .calendar-wrap.mode-active .block-active-compact .block-url,
-.calendar-wrap.mode-active .block-active-compact .block-meta {
+.calendar-wrap.mode-active .block-active-compact .block-meta,
+.calendar-wrap.mode-tasks .block-active-compact .block-url,
+.calendar-wrap.mode-tasks .block-active-compact .block-meta {
   display: none;
 }
 .calendar-wrap.mode-active .block-active-compact:hover .block-url,
 .calendar-wrap.mode-active .block-active-compact:focus-within .block-url,
 .calendar-wrap.mode-active .block-active-compact:hover .block-meta,
-.calendar-wrap.mode-active .block-active-compact:focus-within .block-meta {
+.calendar-wrap.mode-active .block-active-compact:focus-within .block-meta,
+.calendar-wrap.mode-tasks .block-active-compact:hover .block-url,
+.calendar-wrap.mode-tasks .block-active-compact:focus-within .block-url,
+.calendar-wrap.mode-tasks .block-active-compact:hover .block-meta,
+.calendar-wrap.mode-tasks .block-active-compact:focus-within .block-meta {
   display: block;
 }
 .calendar-wrap.mode-active .block-active-compact:hover,
-.calendar-wrap.mode-active .block-active-compact:focus-within {
+.calendar-wrap.mode-active .block-active-compact:focus-within,
+.calendar-wrap.mode-tasks .block-active-compact:hover,
+.calendar-wrap.mode-tasks .block-active-compact:focus-within {
   height: auto !important;
-  min-height: 52px;
+  min-height: max(66px, var(--block-calendar-h, 66px));
   padding: 6px 8px;
   overflow: visible;
-  z-index: 95;
+  z-index: 1000;
 }
-/* Plus de masquage de la plage sur les cartes courtes au survol. */
-.calendar-wrap.mode-active .block.stack-slot-more {
-  min-height: 22px;
+.calendar-wrap.mode-active .stack-slot-row:has(.block-active-compact:hover),
+.calendar-wrap.mode-active .stack-slot-row:has(.block-active-compact:focus-within),
+.calendar-wrap.mode-tasks .stack-slot-row:has(.block-active-compact:hover),
+.calendar-wrap.mode-tasks .stack-slot-row:has(.block-active-compact:focus-within) {
+  overflow: visible;
+  z-index: 999;
+}
+.calendar-wrap.mode-active .block.stack-slot-more,
+.calendar-wrap.mode-tasks .block.stack-slot-more {
+  min-height: 28px;
   justify-content: center;
 }
 
@@ -617,7 +643,8 @@ body {
   flex: 1;
   min-height: 0;
 }
-.calendar-wrap.mode-open .active-fused-line {
+.calendar-wrap.mode-open .active-fused-line,
+.calendar-wrap.mode-tasks .active-fused-line {
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-rows: auto auto;
@@ -635,11 +662,13 @@ body {
   text-align: left;
   cursor: pointer;
 }
-.calendar-wrap.mode-open .active-fused-line:hover {
+.calendar-wrap.mode-open .active-fused-line:hover,
+.calendar-wrap.mode-tasks .active-fused-line:hover {
   background: rgba(0, 0, 0, 0.42);
   filter: brightness(1.08);
 }
-.calendar-wrap.mode-open .active-fused-site {
+.calendar-wrap.mode-open .active-fused-site,
+.calendar-wrap.mode-tasks .active-fused-site {
   grid-column: 1;
   grid-row: 1;
   font-weight: 600;
@@ -647,7 +676,8 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.calendar-wrap.mode-open .active-fused-dur {
+.calendar-wrap.mode-open .active-fused-dur,
+.calendar-wrap.mode-tasks .active-fused-dur {
   grid-column: 2;
   grid-row: 1;
   color: var(--green);
@@ -656,7 +686,8 @@ body {
   white-space: nowrap;
   display: none;
 }
-.calendar-wrap.mode-open .active-fused-time {
+.calendar-wrap.mode-open .active-fused-time,
+.calendar-wrap.mode-tasks .active-fused-time {
   grid-column: 1 / -1;
   grid-row: 2;
   color: var(--muted);
@@ -666,7 +697,11 @@ body {
 .calendar-wrap.mode-open .active-fused-line:hover .active-fused-dur,
 .calendar-wrap.mode-open .active-fused-line:focus-visible .active-fused-dur,
 .calendar-wrap.mode-open .active-fused-line:hover .active-fused-time,
-.calendar-wrap.mode-open .active-fused-line:focus-visible .active-fused-time {
+.calendar-wrap.mode-open .active-fused-line:focus-visible .active-fused-time,
+.calendar-wrap.mode-tasks .active-fused-line:hover .active-fused-dur,
+.calendar-wrap.mode-tasks .active-fused-line:focus-visible .active-fused-dur,
+.calendar-wrap.mode-tasks .active-fused-line:hover .active-fused-time,
+.calendar-wrap.mode-tasks .active-fused-line:focus-visible .active-fused-time {
   display: block;
 }
 .block.stack-slot-more {
@@ -1629,7 +1664,7 @@ body {
 .modal {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 2000;
   display: flex;
   align-items: center;
   justify-content: center;

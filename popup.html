@@ -13,7 +13,30 @@
       <h1>OG Time Tab</h1>
       <p class="subtitle">Suivi temps réel</p>
     </div>
+    <button
+      type="button"
+      id="todo-open-btn"
+      class="todo-icon-btn"
+      title="To-do"
+      aria-label="Ouvrir la liste de tâches"
+    >
+      <span class="todo-icon-check" aria-hidden="true"></span>
+    </button>
   </header>
+
+  <section id="today-sessions" class="card">
+    <h2>Sessions du jour</h2>
+    <div id="today-sessions-empty" class="chart-empty hidden">Aucune session aujourd'hui.</div>
+    <div class="chart-wrap">
+      <canvas id="today-sessions-chart" aria-label="Schéma temporel des sessions du jour"></canvas>
+    </div>
+  </section>
+
+  <footer>
+    <a href="dashboard.html" target="_blank" class="btn primary">Dashboard</a>
+    <a href="options.html" target="_blank" class="btn">Options</a>
+  </footer>
+
   <section id="focused" class="card hidden">
     <h2>Onglet actif</h2>
     <p class="title" id="focused-title"></p>
@@ -23,24 +46,18 @@
       <div><span class="label">Actif</span><span id="focused-active" class="active">0s</span></div>
     </div>
   </section>
-  <section id="tabs-list">
-    <h2 class="tabs-heading">
-      Onglets suivis
-      <span id="tabs-count" class="tabs-count"></span>
-    </h2>
-    <ul id="tabs-ul"></ul>
+
+  <section id="tabs-list" class="tabs-list is-collapsed">
+    <button type="button" id="tabs-toggle" class="tabs-toggle" aria-expanded="false" aria-controls="tabs-ul">
+      <span class="tabs-toggle-label">
+        Onglets suivis
+        <span id="tabs-count" class="tabs-count"></span>
+      </span>
+      <span class="tabs-chevron" aria-hidden="true"></span>
+    </button>
+    <ul id="tabs-ul" hidden></ul>
   </section>
-  <section id="today-sessions" class="card">
-    <h2>Sessions du jour</h2>
-    <div id="today-sessions-empty" class="chart-empty hidden">Aucune session aujourd'hui.</div>
-    <div class="chart-wrap">
-      <canvas id="today-sessions-chart" aria-label="Schéma temporel des sessions du jour"></canvas>
-    </div>
-  </section>
-  <footer>
-    <a href="dashboard.html" target="_blank" class="btn primary">Dashboard</a>
-    <a href="options.html" target="_blank" class="btn">Options</a>
-  </footer>
+
   <script src="lib/chart.umd.min.js"></script>
   <script type="module" src="popup.js"></script>
 </body>

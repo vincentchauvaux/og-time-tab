@@ -303,3 +303,42 @@ setInterval(safeRender, 1000);
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "LIVE_UPDATE") safeRender();
 });
+
+const tabsList = document.getElementById("tabs-list");
+const tabsToggle = document.getElementById("tabs-toggle");
+const tabsUl = document.getElementById("tabs-ul");
+tabsToggle?.addEventListener("click", () => {
+  const collapsed = tabsList.classList.toggle("is-collapsed");
+  tabsToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  if (tabsUl) tabsUl.hidden = collapsed;
+});
+
+document.getElementById("todo-open-btn")?.addEventListener("click", () => {
+  const btn = document.getElementById("todo-open-btn");
+  chrome.runtime
+    .sendMessage({ type: "TODO_PANEL_TOGGLE" })
+    .then((res) => {
+      const open = Boolean(res?.open);
+      if (!btn) return;
+      btn.classList.toggle("is-active", open);
+      btn.setAttribute("aria-pressed", open ? "true" : "false");
+      btn.setAttribute("aria-label", open ? "Fermer la liste de tâches" : "Ouvrir la liste de tâches");
+      btn.title = open ? "Fermer To-do" : "To-do";
+    })
+    .catch(() => {});
+});
+
+(function syncTodoBtnState() {
+  const btn = document.getElementById("todo-open-btn");
+  if (!btn) return;
+  chrome.runtime
+    .sendMessage({ type: "TODO_PANEL_GET_STATE" })
+    .then((res) => {
+      const open = Boolean(res?.open);
+      btn.classList.toggle("is-active", open);
+      btn.setAttribute("aria-pressed", open ? "true" : "false");
+      btn.setAttribute("aria-label", open ? "Fermer la liste de tâches" : "Ouvrir la liste de tâches");
+      btn.title = open ? "Fermer To-do" : "To-do";
+    })
+    .catch(() => {});
+})();

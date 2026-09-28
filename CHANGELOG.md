@@ -1,5 +1,103 @@
 # Changelog
 
+## [1.1.3] - 2026-09-28
+
+### Modifié
+
+- **To-do / Tâches** : **Pause** clôture le segment en cours (bloc coupé sur le calendrier) ; seul le **play** compte ; reprise = nouveau bloc (vrais moments actifs séparés).
+
+## [1.1.2] - 2026-09-28
+
+### Modifié
+
+- **Calendrier - Tâches** : même présentation que **Actif** (cartes côte à côte, titre au repos, durée + plage au survol, mini-spark).
+
+## [1.1.1] - 2026-09-25
+
+### Modifié
+
+- **To-do** : n’apparaît que dans **la fenêtre Chrome qui l’a ouvert** (toujours visible entre onglets de cette fenêtre) ; fermeture auto si cette fenêtre est fermée.
+
+## [1.1.0] - 2026-09-25
+
+### Ajouté
+
+- **To-do lié au calendrier** : métrique **Tâches**, chrono play/pause/stop, overlay multi-onglets, résumé CSV avec tâches.
+
+### Notes
+
+- Passage en **1.1** : fonctionnalité To-do / calendrier suffisamment aboutie pour un bump mineur (au-delà des correctifs 1.0.x).
+
+## [1.0.103] - 2026-09-25
+
+### Modifié
+
+- **Statistiques - Résumé CSV** : inclut les **tâches** To-do (historique + live play/pause) ; colonne `type` (`onglet` | `tache`).
+
+## [1.0.102] - 2026-09-25
+
+### Ajouté
+
+- **To-do ↔ Calendrier** : 3ᵉ métrique **Tâches** ; chrono par tâche (play = ouvert+actif, pause = ouvert seulement, stop = cloture l’entrée) ; clic tâche → dégradé + actions play/pause, stop, corbeille.
+
+## [1.0.101] - 2026-09-25
+
+### Corrigé
+
+- **Service worker** : suppression des `tabs.sendMessage` To-do (source d’erreurs « No SW »), handlers promisifiés avec `.catch`, injection limitée aux onglets non discarded.
+
+## [1.0.100] - 2026-09-25
+
+### Corrigé
+
+- **Modal détail** : `z-index` au-dessus des cartes calendrier mises au premier plan au survol (plus de carte visible à travers la popup).
+
+## [1.0.99] - 2026-09-25
+
+### Corrigé
+
+- **Calendrier Actif** : survol d’une carte derrière une autre → **premier plan** (et y reste jusqu’au prochain survol) ; plancher titre **28 px** pour ne plus couper le texte des toutes petites sessions.
+
+## [1.0.98] - 2026-09-25
+
+### Corrigé
+
+- **Calendrier Actif** : au survol, la carte s’agrandit assez pour titre + durée + plage (min 66 px), sans descendre sous la hauteur calendrier (`--block-calendar-h`).
+
+## [1.0.97] - 2026-09-25
+
+### Corrigé
+
+- **To-do** : l’icône popup **bascule** ouvrir/fermer ; le panneau se resynchronise sur **chaque onglet** activé (plus seulement le premier) ; réinjection si contexte mort après reload.
+
+## [1.0.96] - 2026-09-25
+
+### Corrigé
+
+- **Calendrier Actif** : au survol, les cartes ne se **replient** plus (`height: auto` retirée) — elles peuvent seulement s’agrandir (min 52 px) pour afficher durée + plage.
+
+## [1.0.95] - 2026-09-25
+
+### Corrigé
+
+- **To-do** : réouverture après fermeture d’une fenêtre (ou état `open` déjà vrai) — injection forcée de l’overlay sur l’onglet actif, `openToken` pour déclencher le sync, nettoyage des anciennes fenêtres OS, ré-init après reload extension.
+
+## [1.0.94] - 2026-09-25
+
+### Modifié
+
+- **To-do** : plus de fenêtre OS Chrome (`chrome.windows`) — panneau injecté dans la page (Shadow DOM), **sans barre titre / croix système**. Reste visible en changeant d’onglet et en cliquant hors du panneau ; fermeture uniquement via × ou l’icône popup. Position / taille / tâches synchronisées via `chrome.storage`.
+
+## [1.0.93] - 2026-09-25
+
+### Modifié
+
+- **Popup** : ordre **Sessions du jour** → **Dashboard / Options** → **Onglet actif** → **Onglets suivis** (replié par défaut).
+
+### Ajouté
+
+- **To-do** : icône check à droite du titre ; ouvre une fenêtre flottante persistante (reste ouverte en changeant d’onglet) avec ajout (+), suppression en 2 clics (sélection → corbeille), drag & drop, redimensionnement / déplacement natifs, réduction en pastille icône.
+
 ## [1.0.92] - 2026-09-22
 
 ### Ajouté
