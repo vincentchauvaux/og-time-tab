@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.6] - 2026-10-01
+
+### Modifié
+
+- **To-do** : position **ancrée aux bords** (coin + écart 1 rem) — suit le viewport à chaque onglet / redimensionnement au lieu de garder des pixels absolus (ex. fenêtre élargie après un split).
+
+## [1.1.5] - 2026-10-01
+
+### Modifié
+
+- **To-do replié** : au **repli** (et fin de drag) la pastille **s’accroche au coin le plus proche** ; marge **1 rem** sur tous les côtés, calculée hors scrollbar (`clientWidth` / `clientHeight`) pour ne plus coller à droite.
+
+## [1.1.4] - 2026-10-01
+
+### Modifié
+
+- **To-do replié** : la pastille est **déplaçable** ; à la réouverture, le panneau se **repositionne** (coins / bas) pour rester entièrement visible.
+
 ## [1.1.3] - 2026-09-28
 
 ### Modifié

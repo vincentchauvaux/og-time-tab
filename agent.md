@@ -24,7 +24,7 @@ Suivi du temps par onglet : **temps ouvert** (onglet existant) et **temps actif*
 | `lib/chart.umd.min.js` | Chart.js (bundle local, CSP extension) |
 | `icons/` | Logo horloge PNG (16 / 32 / 48 / 128) — barre d’outils Chrome + UI |
 | `popup.html/js/css` | Résumé onglets + liens ; ordre Sessions → boutons → actif → suivis (replié) ; icône To-do (v1.0.93) |
-| `todo-overlay.js` | Panneau To-do (Shadow DOM) ; play/pause/stop ; **une seule fenêtre Chrome** hôte (v1.1.1) |
+| `todo-overlay.js` | Panneau To-do (Shadow DOM) ; play/pause/stop ; fenêtre hôte ; ancrage bords (écart 1rem), snap coin, fit viewport (v1.1.6) |
 | `lib/todos.js` | Persistance tâches / UI / clés `todo:` + timerStatus |
 | `options.html/js/css` | Réglages comportement humain |
 | `dashboard.html/js/css` | Calendrier semaine, modal détail, graphiques |
@@ -707,6 +707,9 @@ Le changement de focus enregistre une activité lgre **uniquement** sur l'onglet
 
 | Version | Date | Notes |
 |---------|------|-------|
+| **1.1.6** | 2026-10-01 | To-do : ancrage aux bords (écart conservé entre onglets / resize) - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.1.5** | 2026-10-01 | To-do : snap coin au repli, marge 1rem hors scrollbar - voir [CHANGELOG.md](./CHANGELOG.md) |
+| **1.1.4** | 2026-10-01 | To-do : pastille déplaçable + fit viewport à l’ouverture - voir [CHANGELOG.md](./CHANGELOG.md) |
 | **1.1.3** | 2026-09-28 | Pause To-do coupe le bloc calendrier (segments play séparés) - voir [CHANGELOG.md](./CHANGELOG.md) |
 | **1.1.2** | 2026-09-28 | Calendrier Tâches : présentation type Actif (côte à côte) - voir [CHANGELOG.md](./CHANGELOG.md) |
 | **1.1.1** | 2026-09-25 | To-do limité à la fenêtre hôte (pas toutes les fenêtres) - voir [CHANGELOG.md](./CHANGELOG.md) |
@@ -819,7 +822,7 @@ Le changement de focus enregistre une activité lgre **uniquement** sur l'onglet
 
 ## 0tat du projet
 
-- Extension MV3 fonctionnelle (v1.1.3)
+- Extension MV3 fonctionnelle (v1.1.6)
 - Popup, options, dashboard calendrier + stats Chart.js
 - Modal détail bloc calendrier (URL / groupe en liens sécurisés) ; panneau liste multi-onglets (créneaux chevauchants, lignes par `groupKey`)
 - Popup : onglets suivis regroupés par site/groupe (totaux O/A), compteur groupes/onglets dans l"en-tête de liste, et schéma temporel "sessions du jour" (Chart.js) ; To-do overlay page (v1.0.94)

@@ -36,7 +36,7 @@
 
   /** @type {{ id: string, text: string }[]} */
   let todos = [];
-  /** @type {{ open?: boolean, collapsed?: boolean, left?: number, top?: number, width?: number, height?: number, hostWindowId?: number|null }} */
+  /** @type {{ open?: boolean, collapsed?: boolean, left?: number, top?: number, width?: number, height?: number, hostWindowId?: number|null, anchorX?: 'left'|'right', anchorY?: 'top'|'bottom', insetX?: number, insetY?: number, viewportW?: number, viewportH?: number }} */
   let ui = { open: false, collapsed: false };
   /** @type {number|null} */
   let myWindowId = null;
@@ -44,6 +44,8 @@
   let armedId = null;
   /** @type {string|null} */
   let dragId = null;
+  /** Drag en cours : left/top libres, sans ré-ancrage. */
+  let layoutFree = false;
 
   let host = null;
   let root = null;
@@ -233,9 +235,10 @@
       .fab{
         width:${FAB}px;height:${FAB}px;border-radius:50%;border:1.5px solid rgba(40,167,69,.75);
         background:#1a1d23;color:#28a745;box-shadow:0 6px 20px rgba(0,0,0,.4);
-        display:inline-flex;align-items:center;justify-content:center;cursor:pointer
+        display:inline-flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;user-select:none
       }
       .fab:hover{background:#22262e}
+      .fab.is-dragging{cursor:grabbing;opacity:.92}
       .fab-check{
         width:14px;height:8px;border-left:2.5px solid currentColor;border-bottom:2.5px solid currentColor;
         transform:rotate(-45deg) translate(1px,-1px);display:block
@@ -243,26 +246,157 @@
     `;
   }
 
+  const EDGE_MARGIN = 16; // 1rem
+
+  /** Zone utile (hors barre de défilement classique — évite pastille collée à droite). */
+  function viewportSize() {
+    const doc = document.documentElement;
+    return {
+      vw: doc.clientWidth || window.innerWidth || 0,
+      vh: doc.clientHeight || window.innerHeight || 0
+    };
+  }
+
+  /** Mémorise le coin + l’écart aux bords (pas des pixels absolus). */
+  function captureDock(left, top, boxW, boxH) {
+    const { vw, vh } = viewportSize();
+    const w = Math.max(1, boxW);
+    const h = Math.max(1, boxH);
+    const distL = left;
+    const distR = vw - left - w;
+    const distT = top;
+    const distB = vh - top - h;
+    const anchorX = distR <= distL ? "right" : "left";
+    const anchorY = distB <= distT ? "bottom" : "top";
+    const insetX = Math.max(0, anchorX === "right" ? distR : distL);
+    const insetY = Math.max(0, anchorY === "bottom" ? distB : distT);
+    return { anchorX, anchorY, insetX, insetY };
+  }
+
+  function positionFromDock(dock, boxW, boxH) {
+    const { vw, vh } = viewportSize();
+    const insetX = Number.isFinite(dock.insetX) ? dock.insetX : EDGE_MARGIN;
+    const insetY = Number.isFinite(dock.insetY) ? dock.insetY : EDGE_MARGIN;
+    const maxLeft = Math.max(EDGE_MARGIN, vw - boxW - EDGE_MARGIN);
+    const maxTop = Math.max(EDGE_MARGIN, vh - boxH - EDGE_MARGIN);
+    let left = dock.anchorX === "right" ? vw - boxW - insetX : insetX;
+    let top = dock.anchorY === "bottom" ? vh - boxH - insetY : insetY;
+    left = clamp(left, EDGE_MARGIN, maxLeft);
+    top = clamp(top, EDGE_MARGIN, maxTop);
+    return { left, top };
+  }
+
+  function ensureDock(base, boxW, boxH) {
+    if (
+      (base.anchorX === "left" || base.anchorX === "right") &&
+      (base.anchorY === "top" || base.anchorY === "bottom")
+    ) {
+      return {
+        anchorX: base.anchorX,
+        anchorY: base.anchorY,
+        insetX: Number.isFinite(base.insetX) ? base.insetX : EDGE_MARGIN,
+        insetY: Number.isFinite(base.insetY) ? base.insetY : EDGE_MARGIN
+      };
+    }
+    // Migration : recalage relatif si l’ancienne taille de fenêtre est connue
+    let left = Number(base.left);
+    let top = Number(base.top);
+    if (!Number.isFinite(left)) left = EDGE_MARGIN;
+    if (!Number.isFinite(top)) top = EDGE_MARGIN;
+    if (Number.isFinite(base.viewportW) && base.viewportW > 0 && Number.isFinite(base.viewportH) && base.viewportH > 0) {
+      const { vw, vh } = viewportSize();
+      left = left * (vw / base.viewportW);
+      top = top * (vh / base.viewportH);
+    }
+    const dock = captureDock(left, top, boxW, boxH);
+    // Ancienne position absolue (autre largeur de fenêtre) → ré-accroche au coin avec marge 1rem
+    return {
+      ...dock,
+      insetX: dock.insetX > 100 ? EDGE_MARGIN : dock.insetX,
+      insetY: dock.insetY > 100 ? EDGE_MARGIN : dock.insetY
+    };
+  }
+
+  /** left/top + ancrage + taille viewport au moment de la sauvegarde. */
+  function placementPayload(left, top, boxW, boxH, extra = {}) {
+    const { vw, vh } = viewportSize();
+    const dock = captureDock(left, top, boxW, boxH);
+    const pos = positionFromDock(dock, boxW, boxH);
+    return {
+      left: pos.left,
+      top: pos.top,
+      ...dock,
+      viewportW: vw,
+      viewportH: vh,
+      ...extra
+    };
+  }
+
   function defaultUi() {
-    const left = Math.max(16, window.innerWidth - DEFAULT_W - 24);
-    const top = Math.max(16, window.innerHeight - DEFAULT_H - 24);
+    const { vw, vh } = viewportSize();
+    const left = Math.max(EDGE_MARGIN, vw - DEFAULT_W - EDGE_MARGIN);
+    const top = Math.max(EDGE_MARGIN, vh - DEFAULT_H - EDGE_MARGIN);
     return {
       open: true,
       collapsed: false,
       left,
       top,
       width: DEFAULT_W,
-      height: DEFAULT_H
+      height: DEFAULT_H,
+      anchorX: "right",
+      anchorY: "bottom",
+      insetX: EDGE_MARGIN,
+      insetY: EDGE_MARGIN,
+      viewportW: vw,
+      viewportH: vh
     };
   }
 
   function normalizedUi() {
     const base = { ...defaultUi(), ...ui };
-    const width = clamp(Number(base.width) || DEFAULT_W, MIN_W, Math.max(MIN_W, window.innerWidth - 8));
-    const height = clamp(Number(base.height) || DEFAULT_H, MIN_H, Math.max(MIN_H, window.innerHeight - 8));
-    const left = clamp(Number(base.left) || 16, 0, Math.max(0, window.innerWidth - (base.collapsed ? FAB : width)));
-    const top = clamp(Number(base.top) || 16, 0, Math.max(0, window.innerHeight - (base.collapsed ? FAB : height)));
-    return { ...base, width, height, left, top };
+    const { vw, vh } = viewportSize();
+    const width = clamp(Number(base.width) || DEFAULT_W, MIN_W, Math.max(MIN_W, vw - EDGE_MARGIN * 2));
+    const height = clamp(Number(base.height) || DEFAULT_H, MIN_H, Math.max(MIN_H, vh - EDGE_MARGIN * 2));
+    const boxW = base.collapsed ? FAB : width;
+    const boxH = base.collapsed ? FAB : height;
+    const dock = ensureDock(base, boxW, boxH);
+    if (layoutFree) {
+      const maxLeft = Math.max(EDGE_MARGIN, vw - boxW - EDGE_MARGIN);
+      const maxTop = Math.max(EDGE_MARGIN, vh - boxH - EDGE_MARGIN);
+      const left = clamp(Number(base.left) || EDGE_MARGIN, EDGE_MARGIN, maxLeft);
+      const top = clamp(Number(base.top) || EDGE_MARGIN, EDGE_MARGIN, maxTop);
+      return { ...base, width, height, left, top, ...dock };
+    }
+    const pos = positionFromDock(dock, boxW, boxH);
+    return { ...base, width, height, left: pos.left, top: pos.top, ...dock };
+  }
+
+  /**
+   * Accroche la pastille au coin le plus proche (contre les bords).
+   * Réf. = centre du FAB ou du panneau selon le contexte.
+   */
+  function snapFabToNearestCorner(refLeft, refTop, refW = FAB, refH = FAB) {
+    const { vw, vh } = viewportSize();
+    const cx = refLeft + refW / 2;
+    const cy = refTop + refH / 2;
+    const left = cx < vw / 2 ? EDGE_MARGIN : Math.max(EDGE_MARGIN, vw - FAB - EDGE_MARGIN);
+    const top = cy < vh / 2 ? EDGE_MARGIN : Math.max(EDGE_MARGIN, vh - FAB - EDGE_MARGIN);
+    return { left, top };
+  }
+
+  /** Position du panneau déplié à partir du FAB (flip coins bas/droite pour rester visible). */
+  function expandPositionFromFab(fabLeft, fabTop, width, height) {
+    const margin = EDGE_MARGIN;
+    const { vw, vh } = viewportSize();
+    const w = clamp(width, MIN_W, Math.max(MIN_W, vw - margin * 2));
+    const h = clamp(height, MIN_H, Math.max(MIN_H, vh - margin * 2));
+    const fabCX = fabLeft + FAB / 2;
+    const fabCY = fabTop + FAB / 2;
+    let left = fabCX > vw / 2 ? fabLeft + FAB - w : fabLeft;
+    let top = fabCY > vh / 2 ? fabTop + FAB - h : fabTop;
+    left = clamp(left, margin, Math.max(margin, vw - w - margin));
+    top = clamp(top, margin, Math.max(margin, vh - h - margin));
+    return { left, top, width: w, height: h };
   }
 
   function renderList() {
@@ -371,14 +505,93 @@
 
     root.querySelector("[data-collapse]")?.addEventListener("click", async (e) => {
       e.stopPropagation();
-      await saveUi({ collapsed: true });
+      const state = normalizedUi();
+      const snapped = snapFabToNearestCorner(state.left, state.top, state.width, state.height);
+      await saveUi(placementPayload(snapped.left, snapped.top, FAB, FAB, { collapsed: true }));
       syncView();
     });
 
-    fabEl?.addEventListener("click", async (e) => {
+    // FAB : drag pour déplacer ; clic court pour déplier (avec repositionnement viewport)
+    let fabDragging = false;
+    let fabMoved = false;
+    let fabDX = 0;
+    let fabDY = 0;
+    let fabStartX = 0;
+    let fabStartY = 0;
+    fabEl?.addEventListener("pointerdown", (e) => {
+      if (!(e instanceof PointerEvent) || e.button !== 0) return;
+      const state = normalizedUi();
+      fabDragging = true;
+      fabMoved = false;
+      layoutFree = true;
+      fabStartX = e.clientX;
+      fabStartY = e.clientY;
+      fabDX = e.clientX - state.left;
+      fabDY = e.clientY - state.top;
+      try {
+        fabEl.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      e.preventDefault();
       e.stopPropagation();
-      await saveUi({ collapsed: false });
+    });
+    fabEl?.addEventListener("pointermove", (e) => {
+      if (!fabDragging || !(e instanceof PointerEvent)) return;
+      if (!fabMoved) {
+        const dist = Math.hypot(e.clientX - fabStartX, e.clientY - fabStartY);
+        if (dist < 6) return;
+        fabMoved = true;
+        fabEl.classList.add("is-dragging");
+      }
+      const { vw, vh } = viewportSize();
+      const left = clamp(e.clientX - fabDX, EDGE_MARGIN, Math.max(EDGE_MARGIN, vw - FAB - EDGE_MARGIN));
+      const top = clamp(e.clientY - fabDY, EDGE_MARGIN, Math.max(EDGE_MARGIN, vh - FAB - EDGE_MARGIN));
+      ui = { ...ui, left, top };
+      applyLayout();
+    });
+    fabEl?.addEventListener("pointerup", async (e) => {
+      if (!fabDragging) return;
+      fabDragging = false;
+      fabEl.classList.remove("is-dragging");
+      try {
+        fabEl.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      if (fabMoved) {
+        fabMoved = false;
+        const state = normalizedUi();
+        const snapped = snapFabToNearestCorner(state.left, state.top);
+        layoutFree = false;
+        await saveUi(placementPayload(snapped.left, snapped.top, FAB, FAB));
+        syncView();
+        return;
+      }
+      fabMoved = false;
+      layoutFree = false;
+      // Clic : déplier et recentrer selon coins / bas
+      const state = normalizedUi();
+      const fitted = expandPositionFromFab(state.left, state.top, state.width, state.height);
+      await saveUi(
+        placementPayload(fitted.left, fitted.top, fitted.width, fitted.height, {
+          collapsed: false,
+          width: fitted.width,
+          height: fitted.height
+        })
+      );
       syncView();
+    });
+    fabEl?.addEventListener("pointercancel", () => {
+      fabDragging = false;
+      fabMoved = false;
+      layoutFree = false;
+      fabEl?.classList.remove("is-dragging");
+    });
+    // Empêche le click natif (déjà géré en pointerup)
+    fabEl?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
     });
 
     list?.addEventListener("click", async (e) => {
@@ -466,6 +679,7 @@
       if (e.target instanceof Element && e.target.closest("button")) return;
       const state = normalizedUi();
       moving = true;
+      layoutFree = true;
       moveDX = e.clientX - state.left;
       moveDY = e.clientY - state.top;
       e.preventDefault();
@@ -493,13 +707,15 @@
       "pointermove",
       (e) => {
         if (moving) {
-          const left = clamp(e.clientX - moveDX, 0, window.innerWidth - 40);
-          const top = clamp(e.clientY - moveDY, 0, window.innerHeight - 40);
+          const { vw, vh } = viewportSize();
+          const left = clamp(e.clientX - moveDX, EDGE_MARGIN, Math.max(EDGE_MARGIN, vw - 40 - EDGE_MARGIN));
+          const top = clamp(e.clientY - moveDY, EDGE_MARGIN, Math.max(EDGE_MARGIN, vh - 40 - EDGE_MARGIN));
           ui = { ...ui, left, top };
           applyLayout();
         } else if (resizing) {
-          const width = clamp(startW + (e.clientX - resizeStartX), MIN_W, window.innerWidth - 8);
-          const height = clamp(startH + (e.clientY - resizeStartY), MIN_H, window.innerHeight - 8);
+          const { vw, vh } = viewportSize();
+          const width = clamp(startW + (e.clientX - resizeStartX), MIN_W, Math.max(MIN_W, vw - EDGE_MARGIN * 2));
+          const height = clamp(startH + (e.clientY - resizeStartY), MIN_H, Math.max(MIN_H, vh - EDGE_MARGIN * 2));
           ui = { ...ui, width, height };
           applyLayout();
         }
@@ -511,19 +727,47 @@
       "pointerup",
       async () => {
         if (moving || resizing) {
+          const wasMoving = moving;
+          const wasResizing = resizing;
           moving = false;
           resizing = false;
+          layoutFree = false;
           const state = normalizedUi();
-          await saveUi({
-            left: state.left,
-            top: state.top,
-            width: state.width,
-            height: state.height
-          });
+          if (wasMoving) {
+            await saveUi(placementPayload(state.left, state.top, state.width, state.height, {
+              width: state.width,
+              height: state.height
+            }));
+          } else if (wasResizing) {
+            // Garde le même ancrage : met à jour la taille + left/top dérivés
+            const dock = {
+              anchorX: state.anchorX,
+              anchorY: state.anchorY,
+              insetX: state.insetX,
+              insetY: state.insetY
+            };
+            const pos = positionFromDock(dock, state.width, state.height);
+            const { vw, vh } = viewportSize();
+            await saveUi({
+              width: state.width,
+              height: state.height,
+              left: pos.left,
+              top: pos.top,
+              ...dock,
+              viewportW: vw,
+              viewportH: vh
+            });
+          }
+          syncView();
         }
       },
       true
     );
+
+    window.addEventListener("resize", () => {
+      if (!ui.open || layoutFree) return;
+      applyLayout();
+    });
 
     // Prevent page interaction bleed for clicks inside panel
     panelEl?.addEventListener("mousedown", (e) => e.stopPropagation());
